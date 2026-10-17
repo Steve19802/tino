@@ -157,8 +157,6 @@ class TinoApp {
       this.username = user.username
       this.els.userLabel.textContent = user.username
       this.isAdmin = user.is_admin
-      document.getElementById('btn-fonts')
-        .classList.toggle('hidden', !this.isAdmin)
       document.getElementById('btn-api-keys')
         .classList.toggle('hidden', !this.isAdmin)
     }
@@ -264,6 +262,7 @@ class TinoApp {
       'btn-history-restore': canEdit,
       'btn-save': canEdit,
       'tree-new': canEdit,
+      'btn-fonts': this.isAdmin || canEdit,
     }))
       document.getElementById(id).classList.toggle('hidden', !visible)
   }

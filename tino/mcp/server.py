@@ -15,7 +15,11 @@ Bearer token. TINO validates the token against the provider's JWKS and runs each
 tool as that user, with their real group memberships driving bucket access.
 '''
 
+import base64
+import functools
+import inspect
 import logging
+import zipfile
 from contextvars import ContextVar
 from urllib.parse import urlparse
 
@@ -25,13 +29,16 @@ import jwt
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .. import config
 from ..auth import ROLE_HIERARCHY, resolve_role
-from ..dependencies import get_bucket_service, get_collab_manager, get_compiler_service, \
-    get_file_service, get_git_service, get_notifier, get_search_service
+from ..dependencies import get_bucket_font_service, get_bucket_service, get_collab_manager, \
+    get_compiler_service, get_file_service, get_git_service, get_notifier, get_search_service
 from ..models import User
+from ..services.compiler import typst_version
+from ..services.file import apply_hunks
 from .instructions import server_instructions
 
 logger = logging.getLogger(__name__)
@@ -275,6 +282,7 @@ logger.info(
     'MCPServer instance created: stateless_http=True, auth_configured=%s',
     'token_verifier' in _auth_kwargs,
 )
+logger.info('Typst compiler version: %s', typst_version())
 
 
 # ── Authorization helpers ──
@@ -309,10 +317,109 @@ def _require(slug: str, min_role: str) -> User:
     return user
 
 
+def _read_text(bucket: str, path: str) -> str:
+    '''Return the text content of a file, preferring the live collab room.
+
+    Mirrors the ``read_file`` tool: open collab rooms carry unsaved edits that
+    outrank the (older) on-disk copy, so edits computed against this content
+    don't clobber in-flight web-UI changes.
+    '''
+    live = get_collab_manager().get_content(bucket, path)
+    if live is not None:
+        return live
+
+    result = get_file_service().read(bucket, path)
+    if result is None:
+        raise FileNotFoundError(f'File not found: {bucket}/{path}')
+    if result.get('binary'):
+        raise ValueError(f'File is binary and cannot be read as text: {bucket}/{path}')
+
+    return result['content']
+
+
+async def _apply_changes(bucket: str, path: str, changes: list[dict]) -> dict:
+    '''Apply search/replace changes to a file and refresh collab state.
+
+    Validates every change against the current content before writing, so a
+    failing change leaves the file untouched. Requires the editor role.
+    '''
+    user = _require(bucket, 'editor')
+    new_content, replaced = apply_hunks(_read_text(bucket, path), changes)
+
+    modified = get_file_service().write(bucket, path, new_content)
+    if modified is None:
+        raise ValueError(f'Invalid path: {path}')
+
+    # Push the new content into any open collab room so connected web-UI
+    # clients see it, and the room's eventual flush doesn't overwrite this edit.
+    await get_collab_manager().reload_rooms(bucket, [path])
+    logger.info('MCP patched %s/%s (%d change(s)) (user: %s)',
+                bucket, path, len(changes), user.username)
+    await get_notifier().notify(bucket)
+    return {
+        'path': path, 'modified': modified,
+        'changes': len(changes), 'replaced': replaced,
+    }
+
+
+#: Exception types a tool raises for *anticipated* failures. Converted to
+#: ``ToolError`` so the MCP SDK surfaces the message to the agent instead of
+#: wrapping it in a generic "Error executing tool <name>".
+_EXPECTED_TOOL_ERRORS = (
+    ValueError,
+    FileNotFoundError,
+    RuntimeError,
+    PermissionError,
+    KeyError,
+)
+
+
+def _tool_safe(fn):
+    '''Convert expected exceptions raised by a tool into a ``ToolError``.
+
+    The MCP SDK only forwards the original message for ``ToolError``; any other
+    exception reaches the model as a bare "Error executing tool <name>". Wrapping
+    keeps the helpful messages (missing files, unmatched ``old_text``, invalid
+    input, …) visible to the agent. Unexpected exceptions still propagate as
+    crashes. ``functools.wraps`` preserves the tool's name, docstring and
+    signature for the SDK's argument schema.
+    '''
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def _wrapped(*args, **kwargs):
+            try:
+                return await fn(*args, **kwargs)
+            except _EXPECTED_TOOL_ERRORS as exc:
+                raise ToolError(str(exc)) from exc
+    else:
+        @functools.wraps(fn)
+        def _wrapped(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except _EXPECTED_TOOL_ERRORS as exc:
+                raise ToolError(str(exc)) from exc
+
+    return _wrapped
+
+
+def _tool(fn=None):
+    '''Register a tool with expected-error surfacing.
+
+    Usable as ``@_tool()`` (like ``@mcp.tool()``) or directly as ``_tool(fn)``
+    for tools registered conditionally (e.g. ``commit``).
+    '''
+    def _decorator(func):
+        return mcp.tool()(_tool_safe(func))
+
+    if fn is None:
+        return _decorator
+    return _decorator(fn)
+
+
 # ── Tools ──
 
 
-@mcp.tool()
+@_tool()
 def list_buckets() -> list[dict]:
     '''List all buckets the current user can access, with their role on each.
 
@@ -343,7 +450,7 @@ def list_buckets() -> list[dict]:
     return results
 
 
-@mcp.tool()
+@_tool()
 def list_files(bucket: str) -> list[dict]:
     '''List all files and directories in a bucket.'''
     logger.debug('MCP list_files called: bucket=%s', bucket)
@@ -351,7 +458,7 @@ def list_files(bucket: str) -> list[dict]:
     return [entry.model_dump() for entry in get_file_service().list(bucket)]
 
 
-@mcp.tool()
+@_tool()
 def search(query: str, bucket: str | None = None) -> list[dict]:
     '''Search file names and contents across the buckets you can access.
 
@@ -389,28 +496,93 @@ def search(query: str, bucket: str | None = None) -> list[dict]:
     return results
 
 
-@mcp.tool()
-def read_file(bucket: str, path: str) -> str:
-    '''Read the text content of a file in a bucket.'''
-    logger.debug('MCP read_file called: bucket=%s, path=%s', bucket, path)
+@_tool()
+def read_file(bucket: str, path: str,
+              start_line: int | None = None, end_line: int | None = None) -> str:
+    '''Read the text content of a file in a bucket.
+
+    Pass *start_line* and *end_line* (1-indexed, inclusive) to read only a
+    range of lines — handy for re-checking an edited region after
+    ``edit_file``/``patch_file`` without re-reading the whole file.
+    '''
+    logger.debug('MCP read_file called: bucket=%s, path=%s, range=%r-%r',
+                 bucket, path, start_line, end_line)
     _require(bucket, 'viewer')
 
-    # If the file is open in the web UI, return the live collab-room content so
-    # reads reflect unsaved edits rather than the (older) on-disk copy.
-    live = get_collab_manager().get_content(bucket, path)
-    if live is not None:
-        return live
+    content = _read_text(bucket, path)
 
-    result = get_file_service().read(bucket, path)
-    if result is None:
-        raise FileNotFoundError(f'File not found: {bucket}/{path}')
-    if result.get('binary'):
-        raise ValueError(f'File is binary and cannot be read as text: {bucket}/{path}')
+    if start_line is None:
+        return content
 
-    return result['content']
+    if start_line < 1:
+        raise ValueError('start_line must be >= 1')
+    if end_line is not None and end_line < start_line:
+        raise ValueError('end_line must be >= start_line')
+
+    lines = content.splitlines()
+    if end_line is None:
+        end_line = len(lines)
+
+    return '\n'.join(lines[start_line - 1:end_line])
 
 
-@mcp.tool()
+@_tool()
+async def edit_file(bucket: str, path: str, old_text: str, new_text: str,
+                    replace_all: bool = False) -> dict:
+    '''Replace a block of text in a file. Requires the editor role.
+
+    *old_text* must match the current content exactly, including whitespace and
+    line endings. When it appears multiple times, pass *replace_all* to replace
+    every occurrence, or use ``patch_file`` with an ``occurrence`` index for a
+    single later match. Prefer this over ``write_file`` for small changes — only
+    the changed text is sent, saving tokens.
+    '''
+    logger.debug('MCP edit_file called: bucket=%s, path=%s, replace_all=%s',
+                 bucket, path, replace_all)
+    return await _apply_changes(bucket, path, [
+        {'old_text': old_text, 'new_text': new_text, 'replace_all': replace_all},
+    ])
+
+
+@_tool()
+async def patch_file(bucket: str, path: str, changes: list[dict]) -> dict:
+    '''Apply one or more search/replace changes to a file atomically.
+
+    Each change is ``{"old_text": "...", "new_text": "...", "occurrence": 0}``
+    plus an optional ``"replace_all": true`` flag. *old_text* must match the
+    current content exactly (whitespace and line endings matter); *occurrence*
+    (0-based, default 0) selects which match to replace, and with
+    ``replace_all`` every occurrence is replaced in one pass (occurrence is
+    ignored). Both are counted against the *evolving* content: changes apply in
+    order, so a later change sees the result of earlier ones. All changes are
+    validated against the current content before anything is written, so a
+    failing change leaves the file untouched. The response reports how many
+    occurrences each change replaced under ``replaced``. Requires the editor
+    role.
+    '''
+    logger.debug('MCP patch_file called: bucket=%s, path=%s, changes=%d',
+                 bucket, path, len(changes))
+    return await _apply_changes(bucket, path, changes)
+
+
+@_tool()
+def grep(bucket: str, pattern: str, path: str | None = None,
+         ignore_case: bool = False) -> list[dict]:
+    '''Search file contents with a regular expression in a bucket.
+
+    Returns files with matching lines: ``{"path", "matches": [{"line", "text"}]}``.
+    Use *path* to restrict the search to a single file or a directory subtree
+    (e.g. ``src/``). Pass *ignore_case* for case-insensitive matching. Prefer
+    ``grep`` when you need a pattern such as ``^#import``; use ``search`` for
+    fuzzy file-name and content lookup.
+    '''
+    logger.debug('MCP grep called: bucket=%s, pattern=%r, path=%r',
+                 bucket, pattern, path)
+    _require(bucket, 'viewer')
+    return get_search_service().grep_bucket(bucket, pattern, path=path, ignore_case=ignore_case)
+
+
+@_tool()
 async def write_file(bucket: str, path: str, content: str) -> dict:
     '''Create or overwrite a text file in a bucket. Requires the editor role.'''
     user = _require(bucket, 'editor')
@@ -427,7 +599,162 @@ async def write_file(bucket: str, path: str, content: str) -> dict:
     return {'path': path, 'modified': modified}
 
 
-@mcp.tool()
+@_tool()
+async def write_files(bucket: str, files: list[dict]) -> dict:
+    '''Create or overwrite multiple text files in a bucket in one call.
+
+    *files* is a list of ``{"path": "...", "content": "..."}`` entries. Writes
+    run sequentially; a file with an invalid path is reported under ``failed``
+    without aborting the rest. Prefer this over repeated ``write_file`` calls
+    when adding many assets at once. Requires the editor role.
+    '''
+    user = _require(bucket, 'editor')
+    if not files:
+        raise ValueError('Provide at least one file entry')
+
+    written: list[dict] = []
+    failed: list[dict] = []
+    for entry in files:
+        path = entry.get('path', '')
+        content = entry.get('content', '')
+        if not isinstance(path, str) or not path or not isinstance(content, str):
+            failed.append({'path': path, 'error': 'Each entry needs "path" and "content" strings'})
+            continue
+        modified = get_file_service().write(bucket, path, content)
+        if modified is None:
+            failed.append({'path': path, 'error': 'Invalid path'})
+        else:
+            written.append({'path': path, 'modified': modified})
+
+    paths = [w['path'] for w in written]
+    if paths:
+        await get_collab_manager().reload_rooms(bucket, paths)
+        logger.info('MCP wrote %d file(s) to %s (user: %s)', len(written), bucket, user.username)
+        await get_notifier().notify(bucket)
+    return {'written': written, 'failed': failed}
+
+
+@_tool()
+def download_bucket(bucket: str, inline: bool = False) -> dict:
+    '''Download the whole bucket as a ZIP archive (the "clone" step).
+
+    With ``inline=False`` (default) returns the URL of the REST download
+    endpoint — note that endpoint requires TINO session or API-key
+    authentication, not the MCP bearer token. With ``inline=True`` the archive
+    is returned base64-encoded, usable with MCP authentication alone. Requires
+    the viewer role.
+    '''
+    user = _require(bucket, 'viewer')
+
+    if not inline:
+        url = f'{config.TINO_BASE_URL or ""}/api/buckets/{bucket}/files/download'
+        return {'bucket': bucket, 'url': url}
+
+    zip_path = get_file_service().zip(bucket)
+    if zip_path is None:
+        raise FileNotFoundError(f'Bucket not found: {bucket}')
+    try:
+        data = zip_path.read_bytes()
+        encoded = base64.b64encode(data).decode('ascii')
+    finally:
+        zip_path.unlink(missing_ok=True)
+
+    logger.info('MCP downloaded %s as ZIP (%d bytes, inline) (user: %s)',
+                bucket, len(data), user.username)
+    return {'bucket': bucket, 'zip': encoded, 'size': len(data)}
+
+
+@_tool()
+async def upload_bucket_zip(bucket: str, zip_base64: str, prefix: str = '') -> dict:
+    '''Upload a base64-encoded ZIP archive into a bucket (the "push" step).
+
+    The archive is extracted into the bucket working tree, overwriting matching
+    files; files not present in the archive are left untouched. *prefix*
+    optionally nests the archive under a directory. Requires the editor role.
+    '''
+    user = _require(bucket, 'editor')
+
+    try:
+        data = base64.b64decode(zip_base64, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError('"zip_base64" must be valid base64 data') from exc
+
+    try:
+        extracted = get_file_service().unzip(bucket, data, prefix)
+    except zipfile.BadZipFile as exc:
+        raise ValueError('"zip_base64" is not a valid ZIP archive') from exc
+
+    if extracted:
+        await get_collab_manager().reload_rooms(bucket, extracted)
+        logger.info('MCP uploaded ZIP to %s (%d files) (user: %s)',
+                    bucket, len(extracted), user.username)
+        await get_notifier().notify(bucket)
+    return {'bucket': bucket, 'extracted': extracted}
+
+
+@_tool()
+def list_bucket_fonts(bucket: str) -> list[dict]:
+    '''List the custom fonts installed in a bucket's ``fonts/`` directory.
+
+    Bucket fonts take precedence over the instance-wide global fonts when both
+    provide the same family. Requires the viewer role.
+    '''
+    logger.debug('MCP list_bucket_fonts called: bucket=%s', bucket)
+    _require(bucket, 'viewer')
+    return get_bucket_font_service(bucket).list()
+
+
+@_tool()
+async def upload_bucket_fonts(bucket: str, fonts: list[dict]) -> dict:
+    '''Upload one or more font files into a bucket. Requires the editor role.
+
+    Each entry is ``{"filename": "...", "data": "<base64>"}`` for a
+    ``.ttf``/``.otf``/``.woff``/``.woff2`` file. Returns
+    ``{"uploaded": [...], "failed": [...]}`` with per-entry errors.
+    '''
+    user = _require(bucket, 'editor')
+    if not fonts:
+        raise ValueError('Provide at least one font entry')
+
+    svc = get_bucket_font_service(bucket)
+    uploaded: list[str] = []
+    failed: list[dict] = []
+    for entry in fonts:
+        filename = entry.get('filename', '')
+        data = entry.get('data', '')
+        if not isinstance(filename, str) or not filename or not isinstance(data, str):
+            failed.append({'filename': filename,
+                           'error': 'Each entry needs "filename" and "data" (base64)'})
+            continue
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except (ValueError, TypeError):
+            failed.append({'filename': filename, 'error': 'Invalid base64 data'})
+            continue
+        if svc.upload(filename, raw):
+            uploaded.append(filename)
+        else:
+            failed.append({'filename': filename, 'error': 'Invalid font filename'})
+
+    if uploaded:
+        logger.info('MCP uploaded %d font(s) to %s (user: %s)',
+                    len(uploaded), bucket, user.username)
+        await get_notifier().notify(bucket)
+    return {'uploaded': uploaded, 'failed': failed}
+
+
+@_tool()
+async def delete_bucket_font(bucket: str, filename: str) -> dict:
+    '''Delete a font from a bucket. Requires the editor role.'''
+    user = _require(bucket, 'editor')
+    if not get_bucket_font_service(bucket).delete(filename):
+        raise ValueError(f'Font not found: {filename}')
+    logger.info('MCP deleted font %s from %s (user: %s)', filename, bucket, user.username)
+    await get_notifier().notify(bucket)
+    return {'deleted': filename}
+
+
+@_tool()
 async def delete_file(bucket: str, path: str) -> dict:
     '''Delete a file from a bucket. Requires the editor role.'''
     user = _require(bucket, 'editor')
@@ -443,7 +770,7 @@ async def delete_file(bucket: str, path: str) -> dict:
     return {'deleted': path}
 
 
-@mcp.tool()
+@_tool()
 async def rename_file(bucket: str, old_path: str, new_path: str) -> dict:
     '''Rename or move a file within a bucket. Requires the editor role.
 
@@ -465,7 +792,7 @@ async def rename_file(bucket: str, old_path: str, new_path: str) -> dict:
     return {'old_path': old_path, 'new_path': new_path}
 
 
-@mcp.tool()
+@_tool()
 async def create_dir(bucket: str, path: str) -> dict:
     '''Create an empty directory in a bucket. Requires the editor role.
 
@@ -483,7 +810,7 @@ async def create_dir(bucket: str, path: str) -> dict:
     return {'path': path}
 
 
-@mcp.tool()
+@_tool()
 async def rename_dir(bucket: str, old_path: str, new_path: str) -> dict:
     '''Rename or move a directory and all its contents. Requires the editor role.'''
     user = _require(bucket, 'editor')
@@ -502,7 +829,7 @@ async def rename_dir(bucket: str, old_path: str, new_path: str) -> dict:
     return {'old_path': old_path, 'new_path': new_path, 'affected': affected}
 
 
-@mcp.tool()
+@_tool()
 async def delete_dir(bucket: str, path: str) -> dict:
     '''Delete a directory and all its contents. Requires the editor role.'''
     user = _require(bucket, 'editor')
@@ -520,27 +847,80 @@ async def delete_dir(bucket: str, path: str) -> dict:
     return {'deleted': path, 'affected': affected}
 
 
-@mcp.tool()
+@_tool()
 def compile_typst(bucket: str, path: str) -> dict:
     '''Compile a Typst file to verify it is valid.
 
-    Returns ``{"success": true, "pages": N}`` when compilation succeeds, or
-    ``{"success": false, "error": "..."}`` with the compiler error otherwise.
-    Use this after editing to check your work before committing.
+    Returns ``{"success": true, "pages": N, "typst_version": "..."}`` when
+    compilation succeeds, or ``{"success": false, "error": "...",
+    "typst_version": "..."}`` with the compiler error otherwise. Use this after
+    editing to check your work before committing; *typst_version* lets you
+    adapt syntax/package versions to the server.
     '''
     logger.debug('MCP compile_typst called: bucket=%s, path=%s', bucket, path)
     _require(bucket, 'viewer')
 
     try:
         pages = get_compiler_service().compile_svg(bucket, path)
-        return {'success': True, 'pages': len(pages)}
+        return {'success': True, 'pages': len(pages), 'typst_version': typst_version()}
     except FileNotFoundError as exc:
         raise FileNotFoundError(str(exc)) from exc
     except RuntimeError as exc:
-        return {'success': False, 'error': str(exc)}
+        return {'success': False, 'error': str(exc), 'typst_version': typst_version()}
 
 
-@mcp.tool()
+@_tool()
+def compile_svg(bucket: str, path: str) -> dict:
+    '''Compile a Typst file and return the rendered SVG pages inline.
+
+    Returns ``{"success": true, "typst_version": "...", "pages": [svg, ...]}``
+    or ``{"success": false, "error": "...", "typst_version": "..."}``. Use this
+    to inspect the compiled output directly (SVG is XML text); note the output
+    can be large for multi-page documents. Requires the viewer role.
+    '''
+    logger.debug('MCP compile_svg called: bucket=%s, path=%s', bucket, path)
+    _require(bucket, 'viewer')
+
+    try:
+        pages = get_compiler_service().compile_svg(bucket, path)
+        return {'success': True, 'typst_version': typst_version(), 'pages': pages}
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+    except RuntimeError as exc:
+        return {'success': False, 'error': str(exc), 'typst_version': typst_version()}
+
+
+@_tool()
+def compile_pdf(bucket: str, path: str) -> dict:
+    '''Compile a Typst file and return the PDF as base64.
+
+    Returns ``{"success": true, "typst_version": "...", "pdf": "<base64>",
+    "size": N}`` or ``{"success": false, "error": "...", "typst_version":
+    "..."}``. Use this to fetch the compiled document for download or rendering
+    elsewhere. Requires the viewer role.
+    '''
+    logger.debug('MCP compile_pdf called: bucket=%s, path=%s', bucket, path)
+    _require(bucket, 'viewer')
+
+    try:
+        pdf_path = get_compiler_service().compile_pdf(bucket, path)
+        try:
+            data = pdf_path.read_bytes()
+            return {
+                'success': True,
+                'typst_version': typst_version(),
+                'pdf': base64.b64encode(data).decode('ascii'),
+                'size': len(data),
+            }
+        finally:
+            pdf_path.unlink(missing_ok=True)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+    except RuntimeError as exc:
+        return {'success': False, 'error': str(exc), 'typst_version': typst_version()}
+
+
+@_tool()
 def git_status(bucket: str) -> list[dict]:
     '''Return the working-tree status (modified, untracked, deleted) of a bucket.'''
     logger.debug('MCP git_status called: bucket=%s', bucket)
@@ -548,7 +928,7 @@ def git_status(bucket: str) -> list[dict]:
     return [s.model_dump() for s in get_git_service().status(bucket)]
 
 
-@mcp.tool()
+@_tool()
 def git_log(bucket: str, path: str | None = None, max_count: int = 20) -> list[dict]:
     '''Return commit history for a bucket, optionally filtered to a single file.'''
     logger.debug('MCP git_log called: bucket=%s, path=%s', bucket, path)
@@ -581,7 +961,10 @@ async def commit(bucket: str, message: str, files: list[str] | None = None) -> d
 # Register the commit tool only when enabled, so deployments can offer a
 # read/write-but-no-commit MCP surface (agents edit, humans commit).
 if config.TINO_MCP_COMMIT_ENABLED:
-    mcp.tool()(commit)
+    _tool(commit)
+    logger.info('MCP commit tool registered (TINO_MCP_COMMIT_ENABLED)')
+else:
+    logger.info('MCP commit tool disabled (set TINO_MCP_COMMIT_ENABLED=true to enable)')
 
 
 # Build the ASGI app once. In dev (auth disabled) an admin user is injected;

@@ -250,4 +250,33 @@ export class TinoAPI extends GitAPI {
     )
   }
 
+  // ── Bucket fonts ──
+
+  /** List fonts installed in a bucket's fonts/ directory. */
+
+  listBucketFonts(slug) {
+    return this._fetch(`${bucketPath(slug)}/fonts`)
+  }
+
+  /** Upload font files into a bucket's fonts/ directory. */
+
+  uploadBucketFonts(slug, fileList) {
+    const form = new FormData()
+    for (const file of fileList)
+      form.append('files', file)
+    return this._fetch(
+      `${bucketPath(slug)}/fonts/upload`,
+      { body: form, method: 'POST' },
+    )
+  }
+
+  /** Delete a font from a bucket. */
+
+  deleteBucketFont(slug, filename) {
+    return this._fetch(
+      `${bucketPath(slug)}/fonts/${encodeURIComponent(filename)}`,
+      { method: 'DELETE' },
+    )
+  }
+
 }

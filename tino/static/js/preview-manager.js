@@ -1,4 +1,7 @@
-import { SINGLE_ITEM, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, escapeHtml } from './constants.js'
+import {
+  PREVIEW_PAGE_WIDTH, SINGLE_ITEM, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP,
+  ZOOM_WHEEL_FACTOR, escapeHtml,
+} from './constants.js'
 
 /**
  * Manages preview rendering and zoom controls.
@@ -128,36 +131,51 @@ export class PreviewManager {
     link.click()
   }
 
-  /** Bind zoom in/out and PDF download buttons. */
+  /** Bind zoom (buttons + Ctrl+wheel), PDF download, and pin buttons. */
 
   bindZoom() {
-    const {previewPage, zoomLabel} = this.app.els
-
     document.getElementById('btn-zoom-in')
-      .addEventListener('click', () => {
-        if (this.app.zoom < ZOOM_MAX) {
-          this.app.zoom += ZOOM_STEP
-          previewPage.style.transform =
-            `scale(${this.app.zoom / 100})`
-          zoomLabel.textContent = `${this.app.zoom}%`
-        }
-      })
+      .addEventListener('click', () => this.setZoom(this.app.zoom + ZOOM_STEP))
 
     document.getElementById('btn-zoom-out')
-      .addEventListener('click', () => {
-        if (this.app.zoom > ZOOM_MIN) {
-          this.app.zoom -= ZOOM_STEP
-          previewPage.style.transform =
-            `scale(${this.app.zoom / 100})`
-          zoomLabel.textContent = `${this.app.zoom}%`
-        }
-      })
+      .addEventListener('click', () => this.setZoom(this.app.zoom - ZOOM_STEP))
+
+    const viewport = document.getElementById('preview-viewport')
+    viewport.addEventListener('wheel', ev => this._onWheelZoom(ev), { passive: false })
 
     document.getElementById('btn-pdf')
       .addEventListener('click', () => this.downloadPdf())
 
     document.getElementById('btn-pin-preview')
       .addEventListener('click', () => this.togglePin())
+  }
+
+  /** Set the preview zoom percentage (clamped), reflowing the page width. */
+
+  setZoom(zoom) {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(zoom)))
+    if (clamped === this.app.zoom)
+      return
+    this.app.zoom = clamped
+    this.app.els.previewPage.style.width =
+      `${PREVIEW_PAGE_WIDTH * clamped / 100}px`
+    this.app.els.zoomLabel.textContent = `${clamped}%`
+  }
+
+  /**
+   * Zoom on Ctrl/⌘ + wheel. Plain wheel is left to normal scrolling. Trackpad
+   * pinch arrives in Chrome as wheel events with ctrlKey set, so it works for
+   * free. Behaves exactly like the zoom buttons: the browser keeps the scroll
+   * position as the page width reflows, so no scroll compensation is needed.
+   */
+
+  _onWheelZoom(ev) {
+    if (!ev.ctrlKey)
+      return
+    ev.preventDefault()
+    this.setZoom(
+      this.app.zoom * (ev.deltaY < 0 ? ZOOM_WHEEL_FACTOR : SINGLE_ITEM / ZOOM_WHEEL_FACTOR),
+    )
   }
 
 }

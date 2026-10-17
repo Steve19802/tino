@@ -1068,16 +1068,20 @@ html, body {
   flex: 1;
   overflow: auto;
   display: flex;
-  justify-content: center;
   padding: 24px;
+  /* Zoom reflows the page width; without this Chrome's scroll anchoring
+     fights the wheel-zoom scroll compensation and flings the view back to
+     the first page when scrolled down. */
+  overflow-anchor: none;
   background: var(--bg-tertiary);
 }
 
 .preview-page {
   width: 595px;
-  transform-origin: top center;
-  transition: transform var(--transition);
   flex-shrink: 0;
+  /* Center when the page fits, but start at the left edge once it's wider
+     than the viewport so the left part stays scrollable while zoomed in. */
+  margin-inline: auto;
 }
 
 /* ── Preview empty state ── */
@@ -2070,6 +2074,24 @@ textarea.form-input {
 }
 
 /* ── Font manager ── */
+
+.font-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.font-section:last-child {
+  border-bottom: none;
+}
+
+.font-section-header {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
 
 .font-toolbar {
   padding: 8px 12px;

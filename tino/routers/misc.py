@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 from .. import config
 from ..dependencies import require_global_admin
 from ..mcp.instructions import server_instructions
-from ..services.compiler import CompilerService
+from ..services.compiler import typst_version
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,6 @@ def _app_version() -> str:
         return 'unknown'
 
 
-def _typst_version() -> str | None:
-    try:
-        return CompilerService.version()
-    except Exception:  # pylint: disable=broad-exception-caught
-        return None
-
-
 def _count_buckets() -> int:
     if not config.TINO_BUCKET_DIR.is_dir():
         return 0
@@ -41,7 +34,7 @@ def _count_buckets() -> int:
 
 
 _APP_VERSION = _app_version()
-_TYPST_VERSION = _typst_version()
+_TYPST_VERSION = typst_version()
 
 
 @router.get('/health')
