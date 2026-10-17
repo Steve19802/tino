@@ -22,6 +22,14 @@ export const ZOOM_MIN = 50
 
 export const ZOOM_MAX = 200
 
+/** Base layout width (px) of the preview page at 100% zoom. */
+
+export const PREVIEW_PAGE_WIDTH = 595
+
+/** Multiplicative zoom factor applied per mouse-wheel notch. */
+
+export const ZOOM_WHEEL_FACTOR = 1.1
+
 /** Minimum drag width in px for the left (file tree) panel. */
 
 export const PANEL_MIN_WIDTH_LEFT = 200
