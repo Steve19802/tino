@@ -28,6 +28,22 @@ If you drop onto a folder, the files are uploaded into that folder.
 
     ZIP archives are extracted automatically on upload.
 
+Bulk transfer via the API
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A bucket's working tree can be downloaded as a ZIP and re-uploaded as a ZIP,
+which acts as a simple *clone / push* workflow for agents or automation:
+
+- ``GET /api/buckets/{slug}/files/download`` — download all source files as ``<slug>.zip``.
+- ``POST /api/buckets/{slug}/files/upload`` — upload one or more files; ZIP
+  archives are extracted automatically (optionally under a ``prefix``).
+
+Extraction is additive: it overwrites matching files and leaves everything else
+untouched. Uploads require the editor role.
+
+The :ref:`MCP server <MCP server>` exposes the same workflow through the
+``download_bucket`` and ``upload_bucket_zip`` tools.
+
 Renaming and deleting
 ~~~~~~~~~~~~~~~~~~~~~
 

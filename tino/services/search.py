@@ -1,6 +1,7 @@
 '''Search service. Matches a query against file names and content in a bucket.'''
 
 import logging
+import re
 
 from ..models import SearchResult, SearchSnippet
 from .file import FileService
@@ -15,6 +16,12 @@ MAX_SNIPPETS_PER_FILE = 5
 
 #: Matching content lines are trimmed to this many characters.
 SNIPPET_MAX_LEN = 200
+
+#: Default maximum number of files reported by grep.
+GREP_MAX_RESULTS = 50
+
+#: Default maximum number of matching lines reported per file by grep.
+GREP_MAX_MATCHES_PER_FILE = 20
 
 
 class SearchService:  # pylint: disable=too-few-public-methods
@@ -84,3 +91,63 @@ class SearchService:  # pylint: disable=too-few-public-methods
                     break
 
         return snippets
+
+    def grep_bucket(  # pylint: disable=too-many-arguments
+        self, slug: str, pattern: str, *, path: str | None = None,
+        ignore_case: bool = False, max_results: int = GREP_MAX_RESULTS,
+        max_matches_per_file: int = GREP_MAX_MATCHES_PER_FILE,
+    ) -> list[dict]:
+        '''Return files whose lines match the *pattern* regex, with match lines.
+
+        Optionally restrict to a single file or a directory subtree via *path*
+        (a trailing slash or exact prefix match). Matching is per line with
+        Python :mod:`re`; pass *ignore_case* to compile the pattern case-
+        insensitively. An invalid regex raises ``ValueError``.
+
+        At most *max_results* files are returned, each with up to
+        *max_matches_per_file* ``{"line": N, "text": "..."}`` entries. Returns
+        ``[{"path": "...", "matches": [...]}]``.
+        '''
+        try:
+            regex = re.compile(pattern, re.IGNORECASE if ignore_case else 0)
+        except re.error as exc:
+            raise ValueError(f'Invalid regex: {exc}') from exc
+
+        prefix = path.rstrip('/') + '/' if path else None
+        results = []
+
+        for entry in self.files.list(slug):
+            if entry.type != 'file':
+                continue
+            if prefix and entry.path != path and not entry.path.startswith(prefix):
+                continue
+            if len(results) >= max_results:
+                break
+
+            matches = self._regex_matches(slug, entry.path, regex, max_matches_per_file)
+            if matches:
+                results.append({'path': entry.path, 'matches': matches})
+
+        logger.debug('grep %r in %s: %d result(s)', pattern, slug, len(results))
+        return results
+
+    def _regex_matches(self, slug: str, path: str, regex, limit: int) -> list[dict]:
+        '''Return matching lines for a single file (empty if binary/too large).'''
+        target = self.files.resolve(slug, path)
+
+        if target is None or target.stat().st_size > MAX_FILE_BYTES:
+            return []
+
+        try:
+            text = target.read_text(encoding='utf-8')
+        except (UnicodeDecodeError, OSError):
+            return []
+
+        matches = []
+        for number, line in enumerate(text.splitlines(), start=1):
+            if regex.search(line):
+                matches.append({'line': number, 'text': line.strip()[:SNIPPET_MAX_LEN]})
+                if len(matches) >= limit:
+                    break
+
+        return matches

@@ -3,11 +3,21 @@
 import logging
 import subprocess
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _COMPILE_TIMEOUT = 30
+
+
+@lru_cache
+def typst_version() -> str | None:
+    '''Return the installed Typst CLI version, or None if it can't be determined.'''
+    try:
+        return CompilerService.version()
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
 
 
 class CompilerService:

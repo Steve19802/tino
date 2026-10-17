@@ -67,10 +67,19 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
      - List files and directories in a bucket.
    * - ``read_file``
      - Viewer
-     - Read a file's text content.
+     - Read a file's text content, optionally a 1-indexed line range via ``start_line``/``end_line``.
+   * - ``grep``
+     - Viewer
+     - Search file contents with a regular expression, optionally scoped to one file or a directory.
    * - ``compile_typst``
      - Viewer
-     - Compile a file and report success or the compiler error.
+     - Compile a file and report success or the compiler error (includes the server's Typst version).
+   * - ``compile_svg``
+     - Viewer
+     - Compile a file and return the rendered SVG pages inline.
+   * - ``compile_pdf``
+     - Viewer
+     - Compile a file and return the PDF as base64.
    * - ``git_status``
      - Viewer
      - Show the working-tree status of a bucket.
@@ -80,6 +89,21 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
    * - ``write_file``
      - Editor
      - Create or overwrite a text file.
+   * - ``write_files``
+     - Editor
+     - Create or overwrite many text files in a single call.
+   * - ``edit_file``
+     - Editor
+     - Replace a block of text (optionally all occurrences via ``replace_all``); cheaper than ``write_file`` for small changes.
+   * - ``patch_file``
+     - Editor
+     - Apply several search/replace changes atomically, with per-change ``occurrence``/``replace_all``; reports how many occurrences each replaced.
+   * - ``download_bucket``
+     - Viewer
+     - Download the whole bucket as a ZIP (URL or inline base64) — the "clone" step.
+   * - ``upload_bucket_zip``
+     - Editor
+     - Upload a base64-encoded ZIP, extracted into the bucket — the "push" step.
    * - ``delete_file``
      - Editor
      - Delete a file.

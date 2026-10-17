@@ -16,6 +16,80 @@ logger = logging.getLogger(__name__)
 IGNORED = {'.git', '.meta.yml'}
 
 
+def _locate_nth(text: str, needle: str, occurrence: int) -> int:
+    '''Return the start index of the *occurrence*-th match, or -1 if absent.'''
+    start = 0
+    found = -1
+    for _ in range(occurrence + 1):
+        found = text.find(needle, start)
+        if found == -1:
+            break
+        start = found + len(needle)
+    return found
+
+
+def apply_hunks(content: str, changes: list[dict]) -> tuple[str, list[int]]:
+    '''Apply search/replace changes to *content*.
+
+    Returns ``(new_content, replaced)`` where ``replaced[i]`` is the number of
+    occurrences replaced by change ``i`` (1 for a single replacement, more for
+    ``replace_all``).
+
+    Each change is a dict with:
+
+    - ``old_text`` — the exact text to locate (required, non-empty).
+    - ``new_text`` — the replacement (optional, default empty = deletion).
+    - ``occurrence`` — 0-based index selecting which match to replace when
+      ``old_text`` appears multiple times (default 0). Counted against the
+      *evolving* content, i.e. the result after all earlier changes.
+    - ``replace_all`` — when true, every occurrence of ``old_text`` is replaced
+      in one pass and ``occurrence`` is ignored (default false).
+
+    Raises ``ValueError`` when a change is malformed, its ``old_text`` is not
+    found, or the requested occurrence is out of range. All changes are applied
+    in order to the accumulated result; nothing is written to disk here.
+    '''
+    result = content
+    replaced: list[int] = []
+
+    for change in changes:
+        old_text = change.get('old_text', '')
+        new_text = change.get('new_text', '')
+        occurrence = change.get('occurrence', 0)
+        replace_all = change.get('replace_all', False)
+
+        if not isinstance(old_text, str) or not old_text:
+            raise ValueError('Each change needs a non-empty "old_text" string')
+        if not isinstance(new_text, str):
+            raise ValueError('"new_text" must be a string')
+        if not isinstance(occurrence, int) or occurrence < 0:
+            raise ValueError('"occurrence" must be a non-negative integer')
+        if not isinstance(replace_all, bool):
+            raise ValueError('"replace_all" must be a boolean')
+
+        if replace_all:
+            count = result.count(old_text)
+            if count == 0:
+                raise ValueError(
+                    f'Text not found: {old_text[:80]!r}'
+                    ' — check whitespace, line endings, or your "old_text" text')
+            result = result.replace(old_text, new_text)
+            replaced.append(count)
+            continue
+
+        found = _locate_nth(result, old_text, occurrence)
+        if found == -1:
+            raise ValueError(
+                f'Text not found (occurrence {occurrence}): {old_text[:80]!r}'
+                ' — check whitespace, line endings, or pass "occurrence"'
+                ' to pick a later match')
+
+        result = result[:found] + new_text + result[found + len(old_text):]
+        replaced.append(1)
+
+    return result, replaced
+
+
 class FileService:
     '''CRUD operations for files within a bucket's working tree.'''
 
@@ -198,7 +272,12 @@ class FileService:
         return affected
 
     def unzip(self, slug: str, data: bytes, prefix: str = '') -> list[str]:
-        '''Extract a ZIP archive into the bucket. Returns list of extracted paths.'''
+        '''Extract a ZIP archive into the bucket. Returns list of extracted paths.
+
+        Entries that would land in ``.git``, ``.meta.yml`` or other dotfiles are
+        skipped (matching the exclusion policy of :meth:`list`/:meth:`zip`), so a
+        malicious or malformed archive cannot clobber the repository metadata.
+        '''
         root = self._bucket_path(slug)
         extracted = []
 
@@ -208,6 +287,10 @@ class FileService:
                     continue
 
                 file_path = f'{prefix}/{info.filename}' if prefix else info.filename
+                rel = Path(file_path)
+                if any(p in IGNORED or p.startswith('.') for p in rel.parts):
+                    continue
+
                 target = self._safe_path(root, file_path)
 
                 if target is None:
