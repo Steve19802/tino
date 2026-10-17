@@ -104,6 +104,15 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
    * - ``upload_bucket_zip``
      - Editor
      - Upload a base64-encoded ZIP, extracted into the bucket — the "push" step.
+   * - ``list_bucket_fonts``
+     - Viewer
+     - List the custom fonts installed in a bucket.
+   * - ``upload_bucket_fonts``
+     - Editor
+     - Upload one or more base64-encoded font files into a bucket.
+   * - ``delete_bucket_font``
+     - Editor
+     - Delete a font from a bucket.
    * - ``delete_file``
      - Editor
      - Delete a file.

@@ -15,7 +15,7 @@ from .dependencies import get_collab_manager
 from .mcp.server import mcp as mcp_server
 from .mcp.server import mcp_asgi_app
 from .middleware import register_middleware
-from .routers import api_keys, buckets, collab
+from .routers import api_keys, bucket_fonts, buckets, collab
 from .routers import compile as compile_router
 from .routers import events, files, fonts, git, misc, search, templates
 
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(misc.router)
     app.include_router(api_keys.router)
     app.include_router(buckets.router)
+    app.include_router(bucket_fonts.router)
     app.include_router(collab.router)
     app.include_router(compile_router.router)
     app.include_router(events.router)

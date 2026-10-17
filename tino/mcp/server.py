@@ -34,7 +34,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from .. import config
 from ..auth import ROLE_HIERARCHY, resolve_role
-from ..dependencies import get_bucket_service, get_collab_manager, \
+from ..dependencies import get_bucket_font_service, get_bucket_service, get_collab_manager, \
     get_compiler_service, get_file_service, get_git_service, get_notifier, get_search_service
 from ..models import User
 from ..services.compiler import typst_version
@@ -690,6 +690,68 @@ async def upload_bucket_zip(bucket: str, zip_base64: str, prefix: str = '') -> d
                     bucket, len(extracted), user.username)
         await get_notifier().notify(bucket)
     return {'bucket': bucket, 'extracted': extracted}
+
+
+@_tool()
+def list_bucket_fonts(bucket: str) -> list[dict]:
+    '''List the custom fonts installed in a bucket's ``fonts/`` directory.
+
+    Bucket fonts take precedence over the instance-wide global fonts when both
+    provide the same family. Requires the viewer role.
+    '''
+    logger.debug('MCP list_bucket_fonts called: bucket=%s', bucket)
+    _require(bucket, 'viewer')
+    return get_bucket_font_service(bucket).list()
+
+
+@_tool()
+async def upload_bucket_fonts(bucket: str, fonts: list[dict]) -> dict:
+    '''Upload one or more font files into a bucket. Requires the editor role.
+
+    Each entry is ``{"filename": "...", "data": "<base64>"}`` for a
+    ``.ttf``/``.otf``/``.woff``/``.woff2`` file. Returns
+    ``{"uploaded": [...], "failed": [...]}`` with per-entry errors.
+    '''
+    user = _require(bucket, 'editor')
+    if not fonts:
+        raise ValueError('Provide at least one font entry')
+
+    svc = get_bucket_font_service(bucket)
+    uploaded: list[str] = []
+    failed: list[dict] = []
+    for entry in fonts:
+        filename = entry.get('filename', '')
+        data = entry.get('data', '')
+        if not isinstance(filename, str) or not filename or not isinstance(data, str):
+            failed.append({'filename': filename,
+                           'error': 'Each entry needs "filename" and "data" (base64)'})
+            continue
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except (ValueError, TypeError):
+            failed.append({'filename': filename, 'error': 'Invalid base64 data'})
+            continue
+        if svc.upload(filename, raw):
+            uploaded.append(filename)
+        else:
+            failed.append({'filename': filename, 'error': 'Invalid font filename'})
+
+    if uploaded:
+        logger.info('MCP uploaded %d font(s) to %s (user: %s)',
+                    len(uploaded), bucket, user.username)
+        await get_notifier().notify(bucket)
+    return {'uploaded': uploaded, 'failed': failed}
+
+
+@_tool()
+async def delete_bucket_font(bucket: str, filename: str) -> dict:
+    '''Delete a font from a bucket. Requires the editor role.'''
+    user = _require(bucket, 'editor')
+    if not get_bucket_font_service(bucket).delete(filename):
+        raise ValueError(f'Font not found: {filename}')
+    logger.info('MCP deleted font %s from %s (user: %s)', filename, bucket, user.username)
+    await get_notifier().notify(bucket)
+    return {'deleted': filename}
 
 
 @_tool()

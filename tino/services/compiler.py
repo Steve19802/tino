@@ -1,6 +1,7 @@
 '''Typst compiler service. Shells out to the system `typst` binary to produce SVG or PDF output.'''
 
 import logging
+import os
 import subprocess
 import tempfile
 from functools import lru_cache
@@ -48,7 +49,7 @@ class CompilerService:
         bucket_dir, source = self._resolve_source(slug, path)
         logger.debug('Compiling SVG for %s/%s', slug, path)
 
-        return self._render_svgs(source, bucket_dir)
+        return self._render_svgs(source, bucket_dir, slug)
 
     def compile_pdf(self, slug: str, path: str) -> Path:
         '''Compile a Typst file and return the path to the resulting PDF.
@@ -65,7 +66,7 @@ class CompilerService:
             output = Path(tmp.name)
 
         try:
-            self._run(source, output, bucket_dir)
+            self._run(source, output, bucket_dir, slug)
         except Exception:
             output.unlink(missing_ok=True)
             raise
@@ -74,16 +75,26 @@ class CompilerService:
 
     # ── Internal ──
 
-    def _render_svgs(self, source, bucket_dir):
+    def _render_svgs(self, source, bucket_dir, slug):
         '''Compile a source file to SVG and return one string per page.'''
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'page-{n}.svg'
-            self._run(source, output, bucket_dir, fmt='svg')
+            self._run(source, output, bucket_dir, slug, fmt='svg')
 
             return [
                 svg_file.read_text(encoding='utf-8')
                 for svg_file in sorted(Path(tmp).glob('page-*.svg'))
             ]
+
+    def _font_paths(self, slug: str) -> list[Path]:
+        '''Existing font directories for a bucket (bucket fonts first).'''
+        paths = []
+        bucket_fonts = self.data_dir / slug / 'fonts'
+        if bucket_fonts.is_dir():
+            paths.append(bucket_fonts)
+        if self.font_dir and self.font_dir.is_dir():
+            paths.append(self.font_dir)
+        return paths
 
     def _resolve_source(self, slug, path):
         '''Validate that the source file exists and is inside the bucket.'''
@@ -98,10 +109,10 @@ class CompilerService:
 
         return bucket_dir, source
 
-    def _run(self, source, output, root, fmt=None):
+    def _run(self, source, output, root, slug, fmt=None):
         '''Build the typst compile command, run it, and raise on failure.'''
         result = subprocess.run(
-            self._build_cmd(source, output, root, fmt),
+            self._build_cmd(source, output, root, slug, fmt),
             cwd=str(root),
             capture_output=True, text=True,
             timeout=_COMPILE_TIMEOUT, check=False,
@@ -111,7 +122,7 @@ class CompilerService:
             logger.warning('Compilation failed for %s: %s', source, result.stderr.strip())
             raise RuntimeError(result.stderr.strip() or 'Compilation failed')
 
-    def _build_cmd(self, source, output, root, fmt=None):
+    def _build_cmd(self, source, output, root, slug, fmt=None):
         '''Assemble the typst compile argument list.'''
         cmd = ['typst', 'compile']
 
@@ -121,8 +132,12 @@ class CompilerService:
         if self.package_dir:
             cmd.extend(['--package-path', str(self.package_dir)])
 
-        if self.font_dir and self.font_dir.is_dir():
-            cmd.extend(['--font-path', str(self.font_dir)])
+        # Font paths are passed as a single --font-path with directories joined
+        # by the OS path separator. The bucket's fonts/ dir comes first so
+        # bucket fonts take precedence over the instance-wide font directory.
+        font_paths = [str(path) for path in self._font_paths(slug)]
+        if font_paths:
+            cmd.extend(['--font-path', os.pathsep.join(font_paths)])
 
         cmd.extend(['--root', str(root), str(source), str(output)])
 

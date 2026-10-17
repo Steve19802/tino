@@ -88,6 +88,12 @@ def get_font_service() -> FontService:
 
 
 @lru_cache
+def get_bucket_font_service(slug: str) -> FontService:
+    '''Per-bucket FontService bound to the bucket's ``fonts/`` directory.'''
+    return FontService(config.TINO_BUCKET_DIR / slug / 'fonts')
+
+
+@lru_cache
 def get_notifier() -> BucketNotifier:
     '''Singleton BucketNotifier for broadcasting file-change events.'''
     return BucketNotifier()

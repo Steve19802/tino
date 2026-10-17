@@ -24,6 +24,24 @@ Administrators can manage fonts directly from the toolbar:
 
     Font management is restricted to administrators.
 
+Bucket-specific fonts
+~~~~~~~~~~~~~~~~~~~~~
+
+Each bucket can also carry its own fonts in a ``fonts/`` directory inside the
+bucket's git repository. They are versioned with the documents, travel with the
+bucket, and take **precedence over global fonts** when both provide the same
+family.
+
+Anyone with the **editor** role on a bucket can manage its fonts:
+
+1. Open the **fonts** dialog from the toolbar.
+2. The **Bucket fonts** section manages the active bucket's fonts; the
+   **Global fonts** section (administrators only) manages the instance-wide set.
+
+Bucket fonts are also exposed through the :ref:`MCP server <MCP server>`
+(``list_bucket_fonts``, ``upload_bucket_fonts``, ``delete_bucket_font``) and
+the REST API (``/api/buckets/{slug}/fonts``).
+
 Providing fonts via Docker
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

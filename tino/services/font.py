@@ -31,6 +31,7 @@ class FontService:
         '''Write a font file. Returns False if the filename is invalid.'''
         if not self._is_valid(filename):
             return False
+        self.font_dir.mkdir(parents=True, exist_ok=True)
         (self.font_dir / filename).write_bytes(data)
         logger.info('Uploaded font %s (%d bytes)', filename, len(data))
         return True

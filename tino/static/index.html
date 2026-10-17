@@ -346,13 +346,31 @@
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <div class="font-toolbar">
-        <button class="btn btn-primary btn-small" id="btn-font-upload">
-          <span class="material-symbols-outlined">upload</span> Upload fonts
-        </button>
-        <input type="file" id="font-upload-input" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+      <div class="font-section hidden" id="font-bucket-section">
+        <div class="font-section-header">
+          <span id="font-bucket-title">Bucket fonts</span>
+        </div>
+        <div class="font-toolbar">
+          <button class="btn btn-primary btn-small" id="btn-bucket-font-upload">
+            <span class="material-symbols-outlined">upload</span> Upload fonts
+          </button>
+          <input type="file" id="bucket-font-upload-input"
+            accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+        </div>
+        <ul class="font-list" id="bucket-font-list"></ul>
       </div>
-      <ul class="font-list" id="font-list"></ul>
+      <div class="font-section hidden" id="font-global-section">
+        <div class="font-section-header">
+          <span>Global fonts</span>
+        </div>
+        <div class="font-toolbar">
+          <button class="btn btn-primary btn-small" id="btn-font-upload">
+            <span class="material-symbols-outlined">upload</span> Upload fonts
+          </button>
+          <input type="file" id="font-upload-input" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+        </div>
+        <ul class="font-list" id="font-list"></ul>
+      </div>
     </div>
   </div>
 
