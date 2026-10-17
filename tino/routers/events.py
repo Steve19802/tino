@@ -4,9 +4,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket
 
-from ..auth import check_access
+from ..auth import check_access, get_ws_user
 from ..dependencies import get_bucket_service, get_notifier
-from ..models import User
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +15,12 @@ router = APIRouter(prefix='/api/buckets/{slug}', tags=['events'])
 @router.websocket('/events')
 async def bucket_events(websocket: WebSocket, slug: str):
     '''Subscribe to file-change events for a bucket.'''
-    user_data = websocket.session.get('user')
+    user = get_ws_user(websocket)
 
-    if not user_data:
+    if user is None:
         await websocket.close(code=4401, reason='Not authenticated')
         return
 
-    user   = User(**user_data)
     bucket = get_bucket_service().get(slug)
 
     if not bucket:

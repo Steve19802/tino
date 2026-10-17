@@ -81,6 +81,23 @@ def get_current_user(request: Request) -> User:
     return User(**user_data)
 
 
+def get_ws_user(websocket) -> User | None:
+    '''Return the authenticated user for a WebSocket, or None if not logged in.
+
+    Honours ``TINO_AUTH_DISABLED`` like :func:`get_current_user`, so WebSocket
+    endpoints (collab, events) behave identically to REST in dev mode instead
+    of failing every connection for lack of a session cookie.
+    '''
+    if config.TINO_AUTH_DISABLED:
+        logger.debug('Auth disabled, returning noauth user')
+        return _NOAUTH_USER
+
+    user_data = websocket.session.get('user')
+    if not user_data:
+        return None
+    return User(**user_data)
+
+
 # ── Authorization ──
 
 

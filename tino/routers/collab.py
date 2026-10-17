@@ -4,9 +4,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket
 
-from ..auth import check_access
+from ..auth import check_access, get_ws_user
 from ..dependencies import get_bucket_service, get_collab_manager
-from ..models import User
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +15,11 @@ router = APIRouter(prefix='/api/buckets/{slug}', tags=['collab'])
 @router.websocket('/collab/{path:path}')
 async def collab_websocket(websocket: WebSocket, slug: str, path: str):
     '''Yjs WebSocket endpoint for real-time collaborative editing of a file.'''
-    user_data = websocket.session.get('user')
-    if not user_data:
+    user = get_ws_user(websocket)
+    if user is None:
         await websocket.close(code=4401, reason='Not authenticated')
         return
 
-    user   = User(**user_data)
     bucket = get_bucket_service().get(slug)
 
     if not bucket:
