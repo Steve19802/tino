@@ -47,6 +47,11 @@ secret_key() {
 # Build the image from source via make (frontend bundle, wheel, docker build).
 build() {
   command -v make >/dev/null 2>&1 || { echo "make not found" >&2; exit 1; }
+  # `make package` writes a versioned wheel per commit; stale ones accumulate in
+  # build/ and the Dockerfile's `COPY build/*.whl` copies them all, which makes
+  # `pip install *.whl` fail on conflicting tino versions. Keep only the one
+  # we're about to build.
+  rm -f "$SCRIPT_DIR"/build/*.whl
   echo "Building TINO image from source: make $BUILD_TARGETS"
   make -C "$SCRIPT_DIR" $BUILD_TARGETS
   # `make docker-image` tags the build as $BUILD_TAG; re-tag if running
