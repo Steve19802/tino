@@ -37,3 +37,6 @@ data/
 
 # Environment
 .env
+
+# Local runner (tino_run.sh) secret
+.tino-secret
