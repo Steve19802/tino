@@ -165,13 +165,25 @@ const _tryLineStart = stream => {
   return null
 }
 
+// A closing delimiter later on the line, with content in between.
+const _hasClosing = (stream, delim) =>
+  stream.string.indexOf(delim, stream.pos + 1) > stream.pos + 1
+
 const _tryInlinePrefix = stream => {
   if (stream.eat('#'))
     return _eatHash(stream)
-  if (stream.eat('*'))
+  // Only treat * / _ as strong / emphasis when a closing delimiter follows on
+  // the same line. Otherwise a lone leading '_' — e.g. a `_name` identifier —
+  // would consume the rest of the line, swallowing a raw block's ``` fence and
+  // desyncing the tokenizer for everything after it.
+  if (stream.peek() === '*' && _hasClosing(stream, '*')) {
+    stream.next()
     return _eatWrapped(stream, '*', 'strong')
-  if (stream.eat('_'))
+  }
+  if (stream.peek() === '_' && _hasClosing(stream, '_')) {
+    stream.next()
     return _eatWrapped(stream, '_', 'emphasis')
+  }
   return null
 }
 
