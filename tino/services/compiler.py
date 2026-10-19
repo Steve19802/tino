@@ -90,16 +90,43 @@ def _flatten_png(data: bytes) -> Image.Image:
     return flat
 
 
-def _compose_overview(pages: list[bytes], max_width: int, max_height: int) -> bytes:
+def _overview_layout(count: int, page_width: int, page_height: int,
+                     max_width: int, max_height: int) -> tuple[int, int, int, int]:
+    '''Return ``(columns, rows, cell_width, cell_height)`` for the overview.
+
+    Picks the column count that yields the largest page tiles, laid out to fit
+    within *max_width* × *max_height*.
+    '''
+    columns, best_scale = count, 0.0
+    for candidate in range(1, count + 1):
+        rows = math.ceil(count / candidate)
+        scale = min(
+            (max_width - _OVERVIEW_GUTTER * (candidate + 1)) / (candidate * page_width),
+            (max_height - _OVERVIEW_GUTTER * (rows + 1)) / (rows * page_height),
+        )
+        if scale > best_scale:
+            columns, best_scale = candidate, scale
+
+    rows = math.ceil(count / columns)
+    cell_width = max(1, int(page_width * best_scale))
+    cell_height = max(1, int(page_height * best_scale))
+    return columns, rows, cell_width, cell_height
+
+
+def _compose_overview(  # pylint: disable=too-many-locals
+    pages: list[bytes], max_width: int, max_height: int,
+) -> bytes:
     '''Compose page PNGs into a single overview grid PNG.
 
-    Pages are laid out in a near-square grid and scaled to fit within
-    *max_width* × *max_height* on a neutral background.
+    Cells keep the page aspect ratio (so no space is wasted) and the grid is
+    laid out to fit the *max_width* × *max_height* bounds with the largest
+    possible tiles.
     '''
-    columns = math.ceil(math.sqrt(len(pages)))
-    rows = math.ceil(len(pages) / columns)
-    cell_width = max(1, (max_width - _OVERVIEW_GUTTER * (columns + 1)) // columns)
-    cell_height = max(1, (max_height - _OVERVIEW_GUTTER * (rows + 1)) // rows)
+    page_width, page_height = Image.open(BytesIO(pages[0])).size
+    columns, rows, cell_width, cell_height = _overview_layout(
+        len(pages), page_width, page_height, max_width, max_height,
+    )
+
     canvas = Image.new(
         'RGB',
         (_OVERVIEW_GUTTER + columns * (cell_width + _OVERVIEW_GUTTER),
