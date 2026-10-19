@@ -1012,13 +1012,20 @@ html, body {
   gap: 4px;
 }
 
-.btn-pdf {
+/* ── Export split button (PDF / PNG) ── */
+
+.export-group {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn-export {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 4px 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: 4px 0 0 4px;
   background: var(--accent);
   color: #ffffff;
   font-size: 12px;
@@ -1027,12 +1034,70 @@ html, body {
   transition: opacity var(--transition);
 }
 
-.btn-pdf:hover {
+.btn-export:hover {
   opacity: 0.85;
 }
 
-.btn-pdf .material-symbols-outlined {
+.btn-export .material-symbols-outlined {
   font-size: 16px;
+}
+
+.btn-export-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.btn-export-arrow:hover {
+  opacity: 0.85;
+}
+
+.btn-export-arrow .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 150px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.export-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.export-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.export-item .material-symbols-outlined {
+  font-size: 18px;
 }
 
 .zoom-level {

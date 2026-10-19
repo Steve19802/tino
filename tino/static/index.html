@@ -170,10 +170,24 @@
           </button>
           <span class="preview-pin-label hidden" id="preview-pin-label"></span>
         </div>
-        <button class="btn-pdf hidden" id="btn-pdf" title="Download PDF">
-          <span class="material-symbols-outlined">download</span>
-          Generate PDF
-        </button>
+        <div class="export-group hidden" id="btn-export">
+          <button class="btn-export" id="btn-export-main" title="Download PDF">
+            <span class="material-symbols-outlined">download</span>
+            <span id="btn-export-label">Generate PDF</span>
+          </button>
+          <button class="btn-export-arrow" id="btn-export-arrow" title="Choose export format"
+            aria-haspopup="true" aria-expanded="false">
+            <span class="material-symbols-outlined">arrow_drop_down</span>
+          </button>
+          <ul class="export-menu hidden" id="export-menu">
+            <li class="export-item" data-format="pdf">
+              <span class="material-symbols-outlined">picture_as_pdf</span>PDF
+            </li>
+            <li class="export-item" data-format="png">
+              <span class="material-symbols-outlined">image</span>PNG (ZIP)
+            </li>
+          </ul>
+        </div>
         <div class="preview-controls">
           <button class="icon-btn" id="btn-zoom-out" title="Zoom out">
             <span class="material-symbols-outlined">zoom_out</span>
