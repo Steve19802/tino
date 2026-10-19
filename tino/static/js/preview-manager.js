@@ -13,6 +13,7 @@ export class PreviewManager {
 
   constructor(app) {
     this.app = app
+    this.exportFormat = 'pdf'
   }
 
   /** The file the preview renders: the pinned file, else the active file. */
@@ -29,7 +30,7 @@ export class PreviewManager {
   async update() {
     const isTyp = this.target && this.target.endsWith('.typ')
     this._renderPinControls()
-    document.getElementById('btn-pdf')
+    document.getElementById('btn-export')
       .classList.toggle('hidden', !isTyp)
     if (isTyp)
       await this.compile()
@@ -120,18 +121,60 @@ export class PreviewManager {
   /** Download the current .typ file as a compiled PDF. */
 
   downloadPdf() {
+    this._download('pdf')
+  }
+
+  /** Download the current .typ file as a ZIP of rendered PNG pages. */
+
+  downloadPng() {
+    this._download('png')
+  }
+
+  /** Trigger a browser download of the current file in *format*. */
+
+  _download(format) {
     if (!this.app.bucket || !this.target)
       return
     const slug = encodeURIComponent(this.app.bucket)
-    const path = this.target
-    const url = `/api/buckets/${slug}/compile/pdf/${path}`
+    const query = format === 'png' ? '?overview=true' : ''
     const link = document.createElement('a')
-    link.href = url
+    link.href = `/api/buckets/${slug}/compile/${format}/${this.target}${query}`
     link.download = ''
     link.click()
   }
 
-  /** Bind zoom (buttons + Ctrl+wheel), PDF download, and pin buttons. */
+  /** Run the export format currently selected in the split button. */
+
+  exportCurrent() {
+    if (this.exportFormat === 'png')
+      this.downloadPng()
+    else
+      this.downloadPdf()
+  }
+
+  /** Select the export format and sync the main button label. */
+
+  setExportFormat(format) {
+    this.exportFormat = format
+    const isPng = format === 'png'
+    document.getElementById('btn-export-label').textContent =
+      isPng ? 'Generate PNGs' : 'Generate PDF'
+    document.getElementById('btn-export-main').title =
+      isPng ? 'Download PNGs (ZIP)' : 'Download PDF'
+  }
+
+  /** Close the export format menu. */
+
+  _closeExportMenu() {
+    const menu = document.getElementById('export-menu')
+    if (menu.classList.contains('hidden'))
+      return
+    menu.classList.add('hidden')
+    document.getElementById('btn-export-arrow')
+      .setAttribute('aria-expanded', 'false')
+  }
+
+  /** Bind zoom (buttons + Ctrl+wheel), export (PDF/PNG), and pin controls. */
 
   bindZoom() {
     document.getElementById('btn-zoom-in')
@@ -143,8 +186,33 @@ export class PreviewManager {
     const viewport = document.getElementById('preview-viewport')
     viewport.addEventListener('wheel', ev => this._onWheelZoom(ev), { passive: false })
 
-    document.getElementById('btn-pdf')
-      .addEventListener('click', () => this.downloadPdf())
+    const menu = document.getElementById('export-menu')
+    const arrow = document.getElementById('btn-export-arrow')
+
+    document.getElementById('btn-export-main')
+      .addEventListener('click', () => this.exportCurrent())
+
+    arrow.addEventListener('click', evt => {
+      evt.stopPropagation()
+      const willOpen = menu.classList.contains('hidden')
+      menu.classList.toggle('hidden', !willOpen)
+      arrow.setAttribute('aria-expanded', String(willOpen))
+    })
+
+    menu.addEventListener('click', evt => {
+      const item = evt.target.closest('.export-item')
+      if (!item)
+        return
+      this._closeExportMenu()
+      this.setExportFormat(item.dataset.format)
+      this.exportCurrent()
+    })
+
+    document.addEventListener('click', () => this._closeExportMenu())
+    document.addEventListener('keydown', evt => {
+      if (evt.key === 'Escape')
+        this._closeExportMenu()
+    })
 
     document.getElementById('btn-pin-preview')
       .addEventListener('click', () => this.togglePin())
