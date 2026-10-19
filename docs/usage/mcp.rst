@@ -71,6 +71,9 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
    * - ``compile_typst``
      - Viewer
      - Compile a file and report success, or the compiler error with structured diagnostics (severity, message, file, line, column).
+   * - ``compile_png``
+     - Viewer
+     - Compile a file and return its pages rasterised to PNG in a ZIP, optionally with an ``overview.png`` grid.
    * - ``git_status``
      - Viewer
      - Show the working-tree status of a bucket.

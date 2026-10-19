@@ -13,6 +13,8 @@ TINO is a collaborative Typst document platform.
 Documents live in *buckets* (git repositories).
 Use these tools to list, read, write, compile, and commit Typst source files.
 Always compile after editing to verify the document is valid.
+Use ``compile_png`` to rasterise a document's pages to PNG (add ``overview``
+for a grid image of every page) when you need to inspect the rendered output.
 Each bucket may have specific instructions.
 Always list buckets first and follow any per-bucket guidance.
 To locate a document by file name or content, use the ``search`` tool instead of

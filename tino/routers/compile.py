@@ -1,13 +1,13 @@
-'''REST endpoints for compiling Typst files to SVG or PDF.'''
+'''REST endpoints for compiling Typst files to SVG, PDF, or PNG.'''
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from ..dependencies import get_compiler_service, require_viewer
-from ..services.compiler import CompileError, CompilerService
+from ..services.compiler import CompileError, CompilerService, zip_pngs
 
 logger = logging.getLogger(__name__)
 
@@ -71,3 +71,43 @@ async def compile_svg(
 
     except RuntimeError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.get('/png/{path:path}')
+async def compile_png(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    slug: str, path: str,
+    ppi: int = 144, overview: bool = False,
+    max_width: int = 2000, max_height: int = 2000,
+    user=Depends(require_viewer),
+    svc: CompilerService = Depends(get_compiler_service),
+):
+    '''Compile a .typ file and return a ZIP of ``page_N.png`` per page.
+
+    Pass ``overview=true`` to also include an ``overview.png`` grid of all
+    pages. *ppi* controls the rasterisation resolution (36-300).
+    '''
+    logger.debug('Compiling PNG for %s/%s (user: %s)', slug, path, user.username)
+    try:
+        result = svc.compile_png(
+            slug, path, ppi=ppi, overview=overview,
+            max_width=max_width, max_height=max_height,
+        )
+
+    except FileNotFoundError as exc:
+        raise HTTPException(404, 'File not found') from exc
+
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    except CompileError as exc:
+        raise _compile_failed(exc) from exc
+
+    except RuntimeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    filename = path.rsplit('/', maxsplit=1)[-1].rsplit('.', maxsplit=1)[0] + '.zip'
+    return Response(
+        content=zip_pngs(result['pages'], result['overview']),
+        media_type='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )

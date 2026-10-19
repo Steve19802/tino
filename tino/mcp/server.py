@@ -15,6 +15,7 @@ Bearer token. TINO validates the token against the provider's JWKS and runs each
 tool as that user, with their real group memberships driving bucket access.
 '''
 
+import base64
 import logging
 from contextvars import ContextVar
 from urllib.parse import urlparse
@@ -32,7 +33,7 @@ from ..auth import ROLE_HIERARCHY, resolve_role
 from ..dependencies import get_bucket_service, get_collab_manager, get_compiler_service, \
     get_file_service, get_git_service, get_notifier, get_search_service
 from ..models import User
-from ..services.compiler import CompileError
+from ..services.compiler import CompileError, zip_pngs
 from .instructions import server_instructions
 
 logger = logging.getLogger(__name__)
@@ -544,6 +545,48 @@ def compile_typst(bucket: str, path: str) -> dict:
         return {'success': False, 'error': str(exc), 'diagnostics': exc.diagnostics}
     except RuntimeError as exc:
         return {'success': False, 'error': str(exc)}
+
+
+@mcp.tool()
+def compile_png(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    bucket: str, path: str, ppi: int = 144, overview: bool = False,
+    max_width: int = 2000, max_height: int = 2000,
+) -> dict:
+    '''Compile a Typst file and return its pages rasterised to PNG.
+
+    Returns ``{"success": true, "page_count": N, "zip": "<base64>"}`` where the
+    ZIP holds ``page_N.png`` for every page, plus an ``overview.png`` grid when
+    *overview* is true. *ppi* sets the rasterisation resolution (36-300);
+    *max_width*/*max_height* bound the overview grid. Returns
+    ``{"success": false, "error": "...", "diagnostics": [...]}`` when
+    compilation fails.
+    '''
+    logger.debug('MCP compile_png called: bucket=%s, path=%s, ppi=%r', bucket, path, ppi)
+    _require(bucket, 'viewer')
+
+    try:
+        result = get_compiler_service().compile_png(
+            bucket, path, ppi=ppi, overview=overview,
+            max_width=max_width, max_height=max_height,
+        )
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        return {'success': False, 'error': str(exc)}
+    except CompileError as exc:
+        return {'success': False, 'error': str(exc), 'diagnostics': exc.diagnostics}
+    except RuntimeError as exc:
+        return {'success': False, 'error': str(exc)}
+
+    archive = zip_pngs(result['pages'], result['overview'])
+    logger.info('MCP compiled %s/%s to %d PNG page(s)', bucket, path, len(result['pages']))
+    return {
+        'success': True,
+        'page_count': len(result['pages']),
+        'overview': result['overview'] is not None,
+        'zip': base64.b64encode(archive).decode('ascii'),
+        'size': len(archive),
+    }
 
 
 @mcp.tool()
