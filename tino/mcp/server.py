@@ -32,6 +32,7 @@ from ..auth import ROLE_HIERARCHY, resolve_role
 from ..dependencies import get_bucket_service, get_collab_manager, get_compiler_service, \
     get_file_service, get_git_service, get_notifier, get_search_service
 from ..models import User
+from ..services.compiler import CompileError
 from .instructions import server_instructions
 
 logger = logging.getLogger(__name__)
@@ -525,8 +526,11 @@ def compile_typst(bucket: str, path: str) -> dict:
     '''Compile a Typst file to verify it is valid.
 
     Returns ``{"success": true, "pages": N}`` when compilation succeeds, or
-    ``{"success": false, "error": "..."}`` with the compiler error otherwise.
-    Use this after editing to check your work before committing.
+    ``{"success": false, "error": "...", "diagnostics": [...]}`` with the
+    compiler error otherwise. Each diagnostic has ``severity``, ``message``,
+    ``file``, ``line`` and ``column`` (the latter three are null when Typst
+    reports no position). Use this after editing to check your work before
+    committing.
     '''
     logger.debug('MCP compile_typst called: bucket=%s, path=%s', bucket, path)
     _require(bucket, 'viewer')
@@ -536,6 +540,8 @@ def compile_typst(bucket: str, path: str) -> dict:
         return {'success': True, 'pages': len(pages)}
     except FileNotFoundError as exc:
         raise FileNotFoundError(str(exc)) from exc
+    except CompileError as exc:
+        return {'success': False, 'error': str(exc), 'diagnostics': exc.diagnostics}
     except RuntimeError as exc:
         return {'success': False, 'error': str(exc)}
 

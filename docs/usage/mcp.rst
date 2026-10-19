@@ -70,7 +70,7 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
      - Read a file's text content.
    * - ``compile_typst``
      - Viewer
-     - Compile a file and report success or the compiler error.
+     - Compile a file and report success, or the compiler error with structured diagnostics (severity, message, file, line, column).
    * - ``git_status``
      - Viewer
      - Show the working-tree status of a bucket.
