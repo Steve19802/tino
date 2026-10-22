@@ -1335,7 +1335,7 @@ button.preview-error-item:hover {
   grid-template:
     "main side" minmax(0, 1fr)
     "bar bar" auto
-    / minmax(0, 1fr) 280px;
+    / minmax(0, 1fr) 340px;
   gap: 12px;
   padding: 12px;
   background: var(--bg-primary);
@@ -1409,6 +1409,27 @@ button.preview-error-item:hover {
 .presenter-timer {
   font-weight: 600;
   color: var(--accent);
+}
+
+.presenter-notes {
+  flex: 1;
+  min-height: 0;
+}
+
+.presenter-note {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.presenter-note-muted {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .presenter-bar {

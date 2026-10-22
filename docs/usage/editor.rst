@@ -164,11 +164,19 @@ the slide, which you can put on the projector and fullscreen (the button in its
 corner, or :kbd:`F11`) — while TINO shows the console:
 
 * the current slide, large;
+* the speaker notes for that slide;
 * the slide coming up next;
 * the wall clock and a timer of how long you have been presenting, with a
   **Reset** button to start it again;
 * the slide counter and a progress bar through the deck;
 * buttons for the previous and next slide, and one to leave.
+
+The notes are the ones Touying and Polylux record with ``#speaker-note[…]`` (or
+``#pdfpc.speaker-note(…)``): they are read from the deck's pdfpc metadata, so
+each note appears beside the slide it belongs to and stays up while you step
+through that slide's animations. A deck without any simply says so. Notes are
+shown as plain text, keeping their line breaks; the Markdown pdfpc would render
+is not interpreted.
 
 Navigation is shared: moving in either window moves both. Presenting follows the
 same keys as the Typst web app:
@@ -184,5 +192,4 @@ with the preview, so saving while presenting refreshes the slides in place and
 stays on the current one — the audience window is told and refetches them.
 Closing the audience window ends the presenter view.
 
-Presenting is read-only and available to anyone who can view the bucket. Speaker
-notes are not shown yet.
+Presenting is read-only and available to anyone who can view the bucket.

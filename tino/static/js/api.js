@@ -166,6 +166,14 @@ export class TinoAPI extends GitAPI {
     return this._fetch(`${bucketPath(slug)}/compile/svg/${path}`)
   }
 
+  // ── Speaker notes ──
+
+  /** The speaker notes a document records, one entry per page (null if none). */
+
+  notes(slug, path) {
+    return this._fetch(`${bucketPath(slug)}/notes/${path}`)
+  }
+
   // ── Templates ──
 
   /** Fetch templates from the Typst Universe package index. */
