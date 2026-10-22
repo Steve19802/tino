@@ -92,9 +92,10 @@ export class CollabSession {
     const local = this._editor.content
     const caret = this._editor.caret
     this._editor.setContent(this._ytext.toString())
-    // Replacing the whole document maps the caret to line 1; restore it.
-    this._editor.setCursor(caret.line, caret.col)
     this._bindCollab()
+    // Adopting the room content replaces the document, mapping the caret to
+    // line 1; restore it after yCollab is bound so nothing clobbers it.
+    this._editor.setCursor(caret.line, caret.col)
     if (this._preserveLocal)
       this._reconcile(local)
     this._preserveLocal = false
