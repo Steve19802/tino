@@ -200,9 +200,23 @@
           </ul>
         </div>
         <div class="preview-controls">
-          <button class="icon-btn hidden" id="btn-present" title="Present">
-            <span class="material-symbols-outlined">slideshow</span>
-          </button>
+          <div class="present-group hidden" id="present-group">
+            <button class="icon-btn" id="btn-present" title="Present">
+              <span class="material-symbols-outlined">slideshow</span>
+            </button>
+            <button class="icon-btn" id="btn-present-arrow" title="Presentation options"
+              aria-haspopup="true" aria-expanded="false">
+              <span class="material-symbols-outlined">arrow_drop_down</span>
+            </button>
+            <ul class="export-menu hidden" id="present-menu">
+              <li class="export-item present-item" data-present="tab">
+                <span class="material-symbols-outlined">slideshow</span>Present in this window
+              </li>
+              <li class="export-item present-item" data-present="presenter">
+                <span class="material-symbols-outlined">co_present</span>Presenter view
+              </li>
+            </ul>
+          </div>
           <button class="icon-btn" id="btn-zoom-out" title="Zoom out">
             <span class="material-symbols-outlined">zoom_out</span>
           </button>
@@ -456,6 +470,38 @@
       </div>
 
     </div>
+  </div>
+
+  <div class="presenter hidden" id="presenter" aria-hidden="true">
+    <div class="presenter-main">
+      <div class="presenter-stage" id="presenter-stage"></div>
+    </div>
+    <aside class="presenter-side">
+      <div class="presenter-panel">
+        <span class="presenter-label">Next</span>
+        <div class="presenter-next" id="presenter-next"></div>
+      </div>
+      <div class="presenter-panel presenter-times">
+        <span class="presenter-clock" id="presenter-clock">--:--:--</span>
+        <span class="presenter-timer" id="presenter-timer">00:00</span>
+        <button class="btn btn-secondary btn-small" id="btn-presenter-reset">Reset</button>
+      </div>
+    </aside>
+    <footer class="presenter-bar">
+      <button class="icon-btn" id="btn-presenter-prev" title="Previous slide">
+        <span class="material-symbols-outlined">chevron_left</span>
+      </button>
+      <span class="presenter-counter" id="presenter-counter">1 / 1</span>
+      <button class="icon-btn" id="btn-presenter-next" title="Next slide">
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+      <div class="presenter-progress">
+        <div class="presenter-progress-fill" id="presenter-progress"></div>
+      </div>
+      <button class="icon-btn" id="btn-presenter-exit" title="Exit presentation (Esc)">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </footer>
   </div>
 
   <div class="presentation hidden" id="presentation" aria-hidden="true">

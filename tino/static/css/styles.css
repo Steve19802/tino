@@ -1254,6 +1254,12 @@ button.preview-error-item:hover {
 
 /* ── Presentation mode ── */
 
+.present-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .presentation {
   position: fixed;
   inset: 0;
@@ -1316,6 +1322,188 @@ button.preview-error-item:hover {
 .presentation-exit:hover,
 .presentation-exit:focus-visible {
   background: var(--cd-red-50);
+  opacity: 1;
+}
+
+/* ── Presenter console ── */
+
+.presenter {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  grid-template:
+    "main side" minmax(0, 1fr)
+    "bar bar" auto
+    / minmax(0, 1fr) 280px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-primary);
+}
+
+.presenter-main {
+  grid-area: main;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.presenter-stage {
+  width: min(100cqw, calc(100cqh * var(--presentation-ratio, 1.7778)));
+  aspect-ratio: var(--presentation-ratio, 1.7778);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.presenter-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.presenter-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.presenter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.presenter-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.presenter-next svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.presenter-times {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.presenter-clock,
+.presenter-timer {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.presenter-timer {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.presenter-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.presenter-counter {
+  min-width: 52px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.presenter-progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.presenter-progress-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+
+/* ── Audience window ── */
+
+.present-window {
+  background: #000000;
+}
+
+.present-audience {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+}
+
+.present-audience-stage {
+  width: min(100vw, calc(100vh * var(--presentation-ratio, 1.7778)));
+  aspect-ratio: var(--presentation-ratio, 1.7778);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.present-audience-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.present-audience-status {
+  position: absolute;
+  bottom: 20px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 60%);
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.present-audience-fullscreen {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 45%);
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition), background var(--transition);
+}
+
+.present-audience-fullscreen:hover,
+.present-audience-fullscreen:focus-visible {
+  background: var(--accent);
   opacity: 1;
 }
 

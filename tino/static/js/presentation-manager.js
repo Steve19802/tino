@@ -1,23 +1,19 @@
-import { PRESENTATION_COUNTER_MS, SINGLE_ITEM } from './constants.js'
 import { PresentationGeometry } from './presentation-geometry.js'
+import { PresentationView } from './presentation-view.js'
+import { PresenterConsole } from './presenter-console.js'
+import { PresenterWindow } from './presenter-window.js'
+import { SINGLE_ITEM } from './constants.js'
 
 /**
- * Full-screen presentation of the compiled preview pages.
+ * Presentation mode: the deck state, its navigation, and the ways to show it.
  *
- * Shows the SVG pages the preview already compiled, one at a time, like a
- * slide deck. Navigation follows the Typst web app: arrows, space, Enter and
- * clicks move between slides, and Escape leaves. The page list stays in sync
- * with the preview, so a recompile while presenting updates the deck in place
- * without losing the current slide.
+ * The pages are the ones the preview already compiled — nothing is rendered
+ * here. A deck can be shown full screen in the app's own tab, or through the
+ * presenter console, which drives a separate audience window on a second display
+ * while showing the presenter the next slide, the clock and the elapsed timer.
+ * The page list stays in sync with the preview, so a recompile while presenting
+ * updates the deck in place without losing the current slide.
  */
-
-/** Keys that advance to the next slide. */
-
-const NEXT_KEYS = new Set([' ', 'ArrowDown', 'ArrowRight', 'Enter', 'PageDown'])
-
-/** Keys that go back to the previous slide. */
-
-const PREV_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'PageUp'])
 
 export class PresentationManager {
 
@@ -25,95 +21,100 @@ export class PresentationManager {
 
   constructor(app) {
     this.app = app
-    this.active = false
     this.pages = []
     this.index = 0
     this.ratio = PresentationGeometry.fallbackRatio()
-    this._counterTimer = null
-    this._onKey = ev => this._handleKey(ev)
-    this._onClick = () => this.next()
-    this._onContext = ev => {
-      ev.preventDefault()
-      this.prev()
-    }
-
-    this._onFullscreen = () => {
-      if (this.active && !document.fullscreenElement)
-        this.exit()
-    }
+    this.view = new PresentationView(app)
+    this.console = new PresenterConsole(app)
+    this.audience = new PresenterWindow(app)
   }
 
-  /** Bind the preview's Present button and the overlay's exit button. */
+  /** Whether a deck is being presented, in either mode. */
+
+  get active() {
+    return this.view.active || this.audience.active
+  }
+
+  /** Bind the Present control, the console, and the audience window. */
 
   bind() {
     document.getElementById('btn-present')
       .addEventListener('click', () => this.start())
-    document.getElementById('btn-present-exit')
-      .addEventListener('click', ev => {
-        ev.stopPropagation()
-        this.exit()
-      })
+    document.getElementById('btn-present-arrow')
+      .addEventListener('click', ev => PresentationManager._toggleMenu(ev))
+    document.getElementById('present-menu')
+      .addEventListener('click', ev => this._menuClick(ev))
+    document.addEventListener('click', () => PresentationManager._closeMenu())
+    document.addEventListener('keydown', ev => PresentationManager._escape(ev))
+    this.console.bind(action => this.dispatch(action))
+    this.audience.bind(
+      action => this.dispatch(action),
+      () => this._audienceClosed(),
+    )
   }
 
-  /**
-   * Enter presentation mode for the file the preview is rendering. Full-screen
-   * is requested straight away, inside the click that started this, because
-   * awaiting first would spend the user gesture and the browser would refuse it.
-   */
+  /** Present the deck full screen in this tab. */
 
   start() {
     if (this.active)
       return
-    const overlay = this.app.els.presentation
-    this.active = true
-    overlay.classList.remove('hidden')
-    overlay.setAttribute('aria-hidden', 'false')
-    this._bind()
-    PresentationManager._requestFullscreen(overlay)
+    this.view.open(action => this.dispatch(action))
     this._load()
   }
 
-  /** Leave presentation mode, release the screen, and clear the slide. */
+  /**
+   * Present through the audience window: open it, show the console here, and let
+   * the two keep each other in step.
+   */
+
+  startPresenter() {
+    if (this.active)
+      return
+    if (!this.audience.open()) {
+      this.app.toast.error('Allow pop-ups to open the presenter view.')
+      return
+    }
+    this.console.open()
+    this._load()
+  }
+
+  /** Leave presentation mode and close whatever was showing the deck. */
 
   exit() {
     if (!this.active)
       return
-    this.active = false
-    this._unbind()
-    const overlay = this.app.els.presentation
-    overlay.classList.add('hidden')
-    overlay.setAttribute('aria-hidden', 'true')
-    this.app.els.presentationStage.replaceChildren()
-    clearTimeout(this._counterTimer)
-    PresentationManager._releaseFullscreen()
+    this.audience.close()
+    this.console.close()
+    this.view.close()
   }
 
-  /** Advance to the next slide, if there is one. */
+  /** Perform a presentation action, from a view or from the audience. */
 
-  next() {
-    const last = this.pages.length - SINGLE_ITEM
-    if (this.index >= last)
+  dispatch(action) {
+    if (action === 'exit') {
+      this.exit()
       return
-    this._show(this.index + SINGLE_ITEM)
-  }
-
-  /** Go back to the previous slide, if there is one. */
-
-  prev() {
-    if (this.index <= 0)
+    }
+    if (action === 'next') {
+      this._step(SINGLE_ITEM)
       return
-    this._show(this.index - SINGLE_ITEM)
+    }
+    if (action === 'prev') {
+      this._step(-SINGLE_ITEM)
+      return
+    }
+    this._jump(action)
   }
 
   /**
-   * Adopt a fresh compile from the preview, so the deck tracks saves while it
-   * is on screen without losing the current slide. The Present button follows
-   * the render even when idle.
+   * Adopt a fresh compile from the preview, so the deck tracks saves while it is
+   * on screen without losing the current slide. The Present control follows the
+   * render even when nothing is being presented.
    */
 
   onPages(render) {
     const presentable = PresentationGeometry.canPresent(render && render.pages)
-    document.getElementById('btn-present').classList.toggle('hidden', !presentable)
+    document.getElementById('present-group').classList.toggle('hidden', !presentable)
     if (!this.active)
       return
     if (!render || !render.pages.length) {
@@ -123,6 +124,41 @@ export class PresentationManager {
     }
     this.pages = render.pages
     this._reflow()
+  }
+
+  /** Move the given number of slides from the current one. */
+
+  _step(delta) {
+    this._show(this.index + delta)
+  }
+
+  /** Jump to the first or last slide. */
+
+  _jump(action) {
+    if (action === 'first')
+      this._show(0)
+    else if (action === 'last')
+      this._show(this.pages.length - SINGLE_ITEM)
+  }
+
+  /** Clamp *index* and repaint every surface showing the deck. */
+
+  _show(index) {
+    if (!this.pages.length)
+      return
+    this.index = Math.min(Math.max(index, 0), this.pages.length - SINGLE_ITEM)
+    this._paint()
+  }
+
+  /** Repaint the console and the audience, or the tab's own full-screen view. */
+
+  _paint() {
+    if (this.audience.active) {
+      this.console.render(this.pages, this.index)
+      this.audience.sync(this.pages, this.index)
+      return
+    }
+    this.view.render(this.pages, this.index)
   }
 
   /** Compile the target if needed, then adopt the render. */
@@ -168,113 +204,64 @@ export class PresentationManager {
     this._reflow()
   }
 
-  /** Measure the deck, size the overlay, and repaint at the current index. */
+  /** Measure the deck, size the slides, and paint at the current index. */
 
   _reflow() {
     const ratio = PresentationGeometry.pageRatio(this.pages[0])
     if (ratio)
       this.ratio = ratio
-    this.app.els.presentation
+    document.documentElement
       .style.setProperty('--presentation-ratio', String(this.ratio))
-    this._show(this.index)
+    this._paint()
   }
 
-  /** Paint the slide at *index* (clamped) and flash the progress counter. */
+  /** A closed audience window leaves the console with nothing to drive. */
 
-  _show(index) {
-    const clamped = Math.min(Math.max(index, 0), this.pages.length - SINGLE_ITEM)
-    const counter = this.app.els.presentationCounter
-    this.index = clamped
-    this.app.els.presentationStage.innerHTML = this.pages[clamped]
-    counter.textContent = `${this.index + SINGLE_ITEM} / ${this.pages.length}`
-    counter.classList.remove('presentation-counter-dim')
-    clearTimeout(this._counterTimer)
-    this._counterTimer = setTimeout(
-      () => counter.classList.add('presentation-counter-dim'),
-      PRESENTATION_COUNTER_MS,
-    )
+  _audienceClosed() {
+    this.app.toast.info('The audience window was closed.')
+    this.exit()
   }
 
-  /** Handle a key while presenting: leave, or move through the deck. */
+  /** Run the Present menu entry the user picked. */
 
-  _handleKey(ev) {
-    if (!this.active)
+  _menuClick(ev) {
+    const item = ev.target.closest('.present-item')
+    if (!item)
       return
-    if (ev.key === 'Escape') {
-      this.exit()
+    PresentationManager._closeMenu()
+    if (item.dataset.present === 'presenter')
+      this.startPresenter()
+    else
+      this.start()
+  }
+
+  /** Open or close the Present menu. */
+
+  static _toggleMenu(ev) {
+    ev.stopPropagation()
+    const menu = document.getElementById('present-menu')
+    const open = menu.classList.contains('hidden')
+    menu.classList.toggle('hidden', !open)
+    document.getElementById('btn-present-arrow')
+      .setAttribute('aria-expanded', String(open))
+  }
+
+  /** Close the Present menu. */
+
+  static _closeMenu() {
+    const menu = document.getElementById('present-menu')
+    if (menu.classList.contains('hidden'))
       return
-    }
-    if (this._navigate(ev.key))
-      ev.preventDefault()
+    menu.classList.add('hidden')
+    document.getElementById('btn-present-arrow')
+      .setAttribute('aria-expanded', 'false')
   }
 
-  /** Move for the navigation keys; true when the key was consumed. */
+  /** Escape closes the Present menu, as it does the export menu. */
 
-  _navigate(key) {
-    if (NEXT_KEYS.has(key)) {
-      this.next()
-      return true
-    }
-    if (PREV_KEYS.has(key)) {
-      this.prev()
-      return true
-    }
-    return this._jump(key)
-  }
-
-  /** Jump to the first or last slide; true when the key was consumed. */
-
-  _jump(key) {
-    if (key === 'Home') {
-      this._show(0)
-      return true
-    }
-    if (key === 'End') {
-      this._show(this.pages.length - SINGLE_ITEM)
-      return true
-    }
-    return false
-  }
-
-  /** Attach the listeners that are only live while presenting. */
-
-  _bind() {
-    document.addEventListener('keydown', this._onKey)
-    document.addEventListener('fullscreenchange', this._onFullscreen)
-    const overlay = this.app.els.presentation
-    overlay.addEventListener('click', this._onClick)
-    overlay.addEventListener('contextmenu', this._onContext)
-  }
-
-  /** Detach the listeners bound by :meth:`_bind`. */
-
-  _unbind() {
-    document.removeEventListener('keydown', this._onKey)
-    document.removeEventListener('fullscreenchange', this._onFullscreen)
-    const overlay = this.app.els.presentation
-    overlay.removeEventListener('click', this._onClick)
-    overlay.removeEventListener('contextmenu', this._onContext)
-  }
-
-  /** Request full-screen on *overlay*, tolerating a refusal. */
-
-  static _requestFullscreen(overlay) {
-    if (!overlay.requestFullscreen)
-      return
-    overlay.requestFullscreen().catch(() => {
-      // Full-screen can be refused, for instance with no transient activation.
-      // The overlay still covers the app, so presenting continues in the tab.
-    })
-  }
-
-  /** Leave full-screen, if we still hold it. */
-
-  static _releaseFullscreen() {
-    if (!document.fullscreenElement)
-      return
-    document.exitFullscreen().catch(() => {
-      // The browser can refuse if the screen was already released; ignore it.
-    })
+  static _escape(ev) {
+    if (ev.key === 'Escape')
+      PresentationManager._closeMenu()
   }
 
 }
