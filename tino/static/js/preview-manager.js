@@ -150,9 +150,17 @@ export class PreviewManager {
   /** Open the diagnostic's file and move the caret to its position. */
 
   async _jumpToDiagnostic(diag) {
-    // Record the target as the tab's caret so it also survives a collab re-sync.
     const col = Math.max(SINGLE_ITEM, diag.column)
     this.app.tabPositions[diag.file] = { line: diag.line, col }
+
+    // Jumping within the current file needs no reload: re-opening it tears the
+    // collab room down and back up (a spurious "collaboration lost" toast) and
+    // recompiles for nothing.
+    if (diag.file === this.app.currentFile) {
+      this.app.els.editor.setCursor(diag.line, col)
+      return
+    }
+
     await this.app.editor.openFile(diag.file)
     const place = () => this.app.els.editor.setCursor(diag.line, col)
     place()
