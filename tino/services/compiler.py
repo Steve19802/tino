@@ -57,6 +57,10 @@ _SHORT_RE = re.compile(r'^(.*?):(\d+):(\d+): (error|warning): ?(.*)$')
 #: Help/hint continuation lines (``help:`` / ``= hint:``), never diagnostics.
 _HINT_RE = re.compile(r'^\s*(?:=\s*)?(?:help|hint):')
 
+#: Expression handed to ``typst eval`` to read a document's pdfpc metadata,
+#: which is where Touying and Polylux record their speaker notes.
+_NOTES_EXPRESSION = 'query(<pdfpc-file>).first().value'
+
 
 class CompileError(RuntimeError):
     '''Failed compilation holding its diagnostics and raw stderr.'''
@@ -115,6 +119,32 @@ def parse_diagnostics(stderr: str) -> list[dict]:
             current['column'] = int(location.group(3))
 
     return diagnostics
+
+
+def parse_notes(output: str) -> list[str | None]:
+    '''Turn a document's pdfpc metadata into one speaker note per page.
+
+    Touying and Polylux record speaker notes as pdfpc metadata: a JSON object
+    whose ``pages`` list holds one entry per page, in page order, each with an
+    optional ``note``. Returns a list as long as that page list — None where a
+    page has no note — or an empty list when there is no usable metadata.
+
+    A deck built with animation steps repeats a slide's note on every step, so
+    the notes line up with the compiled pages one to one.
+    '''
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        return []
+
+    pages = data.get('pages') if isinstance(data, dict) else None
+    if not isinstance(pages, list):
+        return []
+
+    return [
+        page.get('note') if isinstance(page, dict) else None
+        for page in pages
+    ]
 
 
 def _flatten_png(data: bytes) -> Image.Image:
@@ -536,6 +566,20 @@ class CompilerService:
 
         return final, report
 
+    def compile_notes(self, slug: str, path: str) -> list[str | None]:
+        '''Read the speaker notes a document records for each page.
+
+        Touying and Polylux write speaker notes into pdfpc metadata, which
+        ``typst eval`` can read back. Returns one entry per page — None where a
+        page has no note — or an empty list for a document without that
+        metadata. A document with no notes is the common case, not a failure:
+        presenting works either way, so nothing here raises for it.
+        Raises FileNotFoundError if the source file doesn't exist.
+        '''
+        bucket_dir, source = self._resolve_source(slug, path)
+
+        return self._read_notes(source, bucket_dir, slug)
+
     # ── Internal ──
 
     def _render_svgs(self, source, bucket_dir, slug):
@@ -731,5 +775,43 @@ class CompilerService:
             cmd.extend(['--font-path', os.pathsep.join(font_paths)])
 
         cmd.extend([str(source), str(output)])
+
+        return cmd
+
+    def _read_notes(self, source, bucket_dir, slug):
+        '''Run the pdfpc query for a source file and parse its speaker notes.'''
+        try:
+            result = subprocess.run(
+                self._build_notes_cmd(source, bucket_dir, slug),
+                cwd=str(bucket_dir), capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
+                timeout=_COMPILE_TIMEOUT, check=False,
+            )
+
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning('Reading speaker notes failed for %s: %s', source, exc)
+            return []
+
+        if result.returncode != 0:
+            # Every Touying deck records pdfpc metadata unless it is turned off,
+            # but an ordinary document records none, so this is expected.
+            logger.debug('No speaker notes for %s: %s', source,
+                         self._strip_paths(result.stderr.strip(), bucket_dir))
+            return []
+
+        return parse_notes(result.stdout)
+
+    def _build_notes_cmd(self, source, root, slug):
+        '''Assemble the typst eval argument list that reads pdfpc metadata.'''
+        cmd = ['typst', 'eval', '--format', 'json']
+
+        if self.package_dir:
+            cmd.extend(['--package-path', str(self.package_dir)])
+
+        font_paths = [str(path) for path in self._font_paths(slug)]
+        if font_paths:
+            cmd.extend(['--font-path', os.pathsep.join(font_paths)])
+
+        cmd.extend(['--root', str(root), '--in', str(source), _NOTES_EXPRESSION])
 
         return cmd

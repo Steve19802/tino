@@ -68,6 +68,7 @@ class TinoApp {
       presenterClock: document.getElementById('presenter-clock'),
       presenterCounter: document.getElementById('presenter-counter'),
       presenterNext: document.getElementById('presenter-next'),
+      presenterNote: document.getElementById('presenter-note'),
       presenterProgress: document.getElementById('presenter-progress'),
       presenterStage: document.getElementById('presenter-stage'),
       presenterTimer: document.getElementById('presenter-timer'),

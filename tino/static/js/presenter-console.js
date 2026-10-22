@@ -32,6 +32,9 @@ export class PresenterConsole {
     this._startedAt = 0
     this._clockTimer = null
     this._dispatch = null
+    this._index = 0
+    this._notes = null
+    this._pages = null
   }
 
   /** Whether the console is currently on screen. */
@@ -40,10 +43,13 @@ export class PresenterConsole {
     return this._open
   }
 
-  /** Show the console and start its clock. */
+  /** Show the console, start its clock, and load the deck's speaker notes. */
 
   open() {
     this._open = true
+    this._notes = null
+    this._pages = null
+    clearInterval(this._clockTimer)
     this.app.els.presenter.classList.remove('hidden')
     this.app.els.presenter.setAttribute('aria-hidden', 'false')
     this.resetTimer()
@@ -77,15 +83,72 @@ export class PresenterConsole {
     document.addEventListener('keydown', ev => this._key(ev))
   }
 
-  /** Paint the current slide, the next slide, the counter and the progress. */
+  /** Paint the console: the slides, the progress, and the current slide's note. */
 
   render(pages, index) {
+    this._index = index
+    this._paintSlides(pages, index)
+    this._syncNotes(pages)
+    this._showNote()
+  }
+
+  /** Paint the current slide, the next slide, the counter and the progress. */
+
+  _paintSlides(pages, index) {
     const position = index + SINGLE_ITEM
     PresenterConsole._paint(this.app.els.presenterStage, pages[index])
-    PresenterConsole._paint(this.app.els.presenterNext, pages[position])
+    PresenterConsole._paint(this.app.els.presenterNext, pages[index + SINGLE_ITEM])
     this.app.els.presenterCounter.textContent = `${position} / ${pages.length}`
     this.app.els.presenterProgress.style.width =
       `${position * 100 / pages.length}%`
+  }
+
+  /** Fetch the deck's speaker notes when the deck itself changes. */
+
+  _syncNotes(pages) {
+    if (pages === this._pages)
+      return
+    this._pages = pages
+    this._loadNotes()
+  }
+
+  /** Read the speaker notes for the deck the preview is showing. */
+
+  async _loadNotes() {
+    const notes = await PresenterConsole._fetchNotes(this.app)
+    this._notes = notes
+    this._showNote()
+  }
+
+  /** The notes endpoint's contents, or an empty list when it cannot be read. */
+
+  static async _fetchNotes(app) {
+    try {
+      const body = await app.api.notes(app.bucket, app.preview.target)
+      return body.notes
+    }
+    catch {
+      return []
+    }
+  }
+
+  /** Show the note for the current slide, or a hint when there is none. */
+
+  _showNote() {
+    const element = this.app.els.presenterNote
+    const note = this._notes ? this._notes[this._index] : null
+    element.textContent = note || PresenterConsole._noNote(this._notes)
+    element.classList.toggle('presenter-note-muted', !note)
+  }
+
+  /** What the notes pane says when there is no note to show. */
+
+  static _noNote(notes) {
+    if (!notes)
+      return 'Loading speaker notes…'
+    if (notes.every(note => !note))
+      return 'No speaker notes for this deck.'
+    return 'No note for this slide.'
   }
 
   /** Restart the elapsed timer from zero. */
