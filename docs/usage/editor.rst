@@ -178,6 +178,14 @@ through that slide's animations. A deck without any simply says so. Notes are
 shown as plain text, keeping their line breaks; the Markdown pdfpc would render
 is not interpreted.
 
+**Pointer options** in the console's bottom bar switches between the plain
+pointer, a laser dot that follows your mouse, and a pen for drawing on the
+slide. In pen mode a row of ink colours appears next to it, along with
+**Clear this slide** and **Clear all slides**. **Lights off** hides the slide
+from the audience while dimming it in the console, so you can keep your
+bearings. What you point at is mirrored in the audience window, and drawings
+stay with the slide you made them on until you leave presentation mode.
+
 Navigation is shared: moving in either window moves both. Presenting follows the
 same keys as the Typst web app:
 
@@ -185,6 +193,8 @@ same keys as the Typst web app:
   click — next slide.
 * :kbd:`←`, :kbd:`PageUp`, :kbd:`↑` or a right click — previous slide.
 * :kbd:`Home` / :kbd:`End` — first / last slide.
+* :kbd:`L` — laser pointer, :kbd:`Shift+L` — pen, :kbd:`B` — lights off. Each
+  key toggles its tool.
 * :kbd:`Esc` — leave presentation mode.
 
 A counter shows the current slide for a moment after each move. The deck keeps up

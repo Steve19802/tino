@@ -62,6 +62,19 @@ has already compiled; it never re-renders anything itself.
   case: the endpoint answers with an empty list rather than an error, and
   presenting is unaffected. Notes are shown as plain text — the Markdown pdfpc
   would render is not interpreted.
+- The pointer, the pen and the lights live in ``PresentationTools``, one
+  instance per surface (the tab's full-screen view, and the console's slide).
+  A point is recorded as a ``{col, row}`` fraction of the slide rather than a
+  pixel, so a stroke drawn in the console lands in the same place in the
+  audience window whatever size either is. Strokes are kept per slide and are
+  relayed to the audience over the same channel; pointer movement is coalesced
+  into one message per frame-ish interval, and because the send reads the state
+  when it fires, the audience never lags a move behind.
+- Drawing and pointing must not disturb navigation, so the tab view's
+  click-to-advance stands down while the pen is out, and the tool keys stay out
+  of the shared navigation key map: ``PresentationTools`` reads :kbd:`L`,
+  :kbd:`Shift+L` and :kbd:`B` on whichever surface is showing, while the
+  audience window maps the navigation keys alone and forwards those.
 - The Present button appears only for decks — more than one page, or a single
   page in a 16:9 or 4:3 aspect ratio — mirroring the web app's automatic
   detection, and stays out of the way for ordinary documents.
@@ -98,8 +111,10 @@ Negative
   | PDF outline in presentation mode.
 - | **Notes are plain text**
   | Speaker notes come from the deck's pdfpc metadata and are shown as they are
-  | written; their Markdown is not interpreted. The laser pointer and the pen
-  | tools are not part of this change either.
+  | written; their Markdown is not interpreted.
+- | **Ink is not persisted**
+  | Drawings live for the presentation only, and are kept per slide in the browser
+  | that made them; leaving presentation mode clears them.
 - | **Animation steps are pages**
   | ``#pause`` steps appear as separate slides, which matches the PDF but means
   | the slide count is the page count.
