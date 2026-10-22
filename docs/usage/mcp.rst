@@ -83,6 +83,9 @@ Each tool enforces the minimum :ref:`role <usage/buckets:Access control>` the us
    * - ``compile_png``
      - Viewer
      - Compile a file and return its pages rasterised to PNG in a ZIP, optionally with an ``overview.png`` grid.
+   * - ``compile_pptx``
+     - Viewer
+     - Export a file as an editable PowerPoint (``.pptx``) with typst-pptx; Touying 0.8+ only. Returns the deck plus a report of items baked as pictures.
    * - ``git_status``
      - Viewer
      - Show the working-tree status of a bucket.
