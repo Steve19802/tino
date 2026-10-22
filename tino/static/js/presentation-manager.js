@@ -32,7 +32,7 @@ export class PresentationManager {
   /** Whether a deck is being presented, in either mode. */
 
   get active() {
-    return this.view.active || this.audience.active
+    return this.view.active || this.console.active || this.audience.active
   }
 
   /** Bind the Present control, the console, and the audience window. */
@@ -78,11 +78,13 @@ export class PresentationManager {
     this._load()
   }
 
-  /** Leave presentation mode and close whatever was showing the deck. */
+  /**
+   * Leave presentation mode and close whatever was showing the deck. Each part
+   * closes idempotently, so this is safe even when only some of them are open —
+   * notably after the audience window closes itself.
+   */
 
   exit() {
-    if (!this.active)
-      return
     this.audience.close()
     this.console.close()
     this.view.close()
@@ -153,7 +155,7 @@ export class PresentationManager {
   /** Repaint the console and the audience, or the tab's own full-screen view. */
 
   _paint() {
-    if (this.audience.active) {
+    if (this.console.active) {
       this.console.render(this.pages, this.index)
       this.audience.sync(this.pages, this.index)
       return
