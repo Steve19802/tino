@@ -258,6 +258,15 @@ export class CodeMirrorEditor {
     return this._parent.classList.contains('hidden')
   }
 
+  /** @returns {{line: number, col: number}} The 1-based caret position. */
+
+  get caret() {
+    const { state } = this._view
+    const head = state.selection.main.head
+    const line = state.doc.lineAt(head)
+    return { line: line.number, col: head - line.from + SINGLE_ITEM }
+  }
+
   /** Move keyboard focus into the editor. */
 
   focus() {
