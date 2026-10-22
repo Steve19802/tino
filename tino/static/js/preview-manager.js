@@ -37,7 +37,7 @@ export class PreviewManager {
     const hasPptx = Boolean(this.app.config && this.app.config.pptxVersion)
     document.getElementById('export-pptx').classList.toggle('hidden', !hasPptx)
     document.getElementById('export-animations').classList.toggle('hidden', !hasPptx)
-    document.getElementById('btn-present').classList.add('hidden')
+    document.getElementById('present-group').classList.add('hidden')
     if (isTyp)
       await this.compile()
     else

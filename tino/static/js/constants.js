@@ -119,3 +119,39 @@ export const PRESENTATION_RATIO_TOLERANCE = 0.03
 /** Time (ms) the slide counter stays visible after navigating. */
 
 export const PRESENTATION_COUNTER_MS = 1600
+
+/** BroadcastChannel name shared by the presenter console and its audience. */
+
+export const PRESENTATION_CHANNEL = 'tino-presentation'
+
+/** Window name for the audience window, so relaunches reuse the same one. */
+
+export const PRESENTATION_WINDOW = 'tino-presentation'
+
+/** Window features for the audience window: a plain, resizable popup. */
+
+export const PRESENTATION_WINDOW_FEATURES = 'popup,width=1280,height=800'
+
+/** Static page loaded in the audience window. */
+
+export const PRESENTATION_PAGE = 'present.html'
+
+/** Presentation action performed for each key, shared by console and audience. */
+
+export const PRESENTATION_KEYS = new Map([
+  [' ', 'next'],
+  ['ArrowDown', 'next'],
+  ['ArrowRight', 'next'],
+  ['Enter', 'next'],
+  ['PageDown', 'next'],
+  ['ArrowLeft', 'prev'],
+  ['ArrowUp', 'prev'],
+  ['PageUp', 'prev'],
+  ['End', 'last'],
+  ['Home', 'first'],
+  ['Escape', 'exit'],
+])
+
+/** Interval (ms) between presenter-console clock ticks. */
+
+export const PRESENTATION_TICK_MS = 1000

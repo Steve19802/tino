@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TINO — Presentation</title>
+  <link rel="icon" type="image/svg+xml" href="img/icon.svg">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block">
+  <link rel="stylesheet" href="css/vendor/colours.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="/api/theme.css">
+</head>
+<body class="present-window">
+  <div class="present-audience" id="present-audience">
+    <div class="present-audience-stage" id="present-audience-stage"></div>
+    <p class="present-audience-status" id="present-audience-status">Waiting for the presenter…</p>
+    <button class="present-audience-fullscreen" id="btn-audience-fullscreen"
+      title="Full screen">
+      <span class="material-symbols-outlined">fullscreen</span>
+    </button>
+  </div>
+  <script type="module" src="js/presentation-audience.js"></script>
+</body>
+</html>

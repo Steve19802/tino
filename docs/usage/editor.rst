@@ -154,11 +154,24 @@ Presentation mode
 
 A **Present** button appears next to the zoom controls when the previewed file
 looks like a deck: anything with more than one page, or a single page in a 16:9
-or 4:3 aspect ratio. It plays the rendered pages full screen, one slide at a
-time — animated builds included, because every animation step is already its own
-page.
+or 4:3 aspect ratio. It plays the rendered pages one slide at a time — animated
+builds included, because every animation step is already its own page. The
+arrow next to it offers two ways to present.
 
-Presenting follows the same keys as the Typst web app:
+**Present in this window** takes over the tab in full screen. **Presenter view**
+is the speaker mode: it opens an *audience window* — a plain window showing only
+the slide, which you can put on the projector and fullscreen (the button in its
+corner, or :kbd:`F11`) — while TINO shows the console:
+
+* the current slide, large;
+* the slide coming up next;
+* the wall clock and a timer of how long you have been presenting, with a
+  **Reset** button to start it again;
+* the slide counter and a progress bar through the deck;
+* buttons for the previous and next slide, and one to leave.
+
+Navigation is shared: moving in either window moves both. Presenting follows the
+same keys as the Typst web app:
 
 * :kbd:`→`, :kbd:`Space`, :kbd:`Enter`, :kbd:`PageDown`, :kbd:`↓` or a left
   click — next slide.
@@ -166,9 +179,10 @@ Presenting follows the same keys as the Typst web app:
 * :kbd:`Home` / :kbd:`End` — first / last slide.
 * :kbd:`Esc` — leave presentation mode.
 
-A counter shows the current slide for a moment after each move. The deck keeps
-up with the preview, so saving while presenting refreshes the slides in place
-and stays on the current one.
+A counter shows the current slide for a moment after each move. The deck keeps up
+with the preview, so saving while presenting refreshes the slides in place and
+stays on the current one — the audience window is told and refetches them.
+Closing the audience window ends the presenter view.
 
 Presenting is read-only and available to anyone who can view the bucket. Speaker
-notes and a separate presenter window are planned for a later release.
+notes are not shown yet.

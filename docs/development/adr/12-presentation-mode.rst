@@ -43,6 +43,13 @@ has already compiled; it never re-renders anything itself.
   root's ``viewBox`` or ``width``/``height`` attributes. No backend, API or MCP
   change is needed: presentation compiles through the existing
   ``GET /api/buckets/{slug}/compile/svg/{path}`` route.
+- Speaker mode is a second window showing only the slide. The app's own window
+  becomes the console — current slide, next slide, wall clock, elapsed timer and
+  progress — and the two are kept in step over a ``BroadcastChannel``. Only the
+  deck's identity, a revision number and the current slide travel over the
+  channel; the audience window fetches the pages itself with the session cookie,
+  and refetches whenever the revision changes, so a recompile mid-talk reaches
+  the projector without pushing page markup across the wire.
 - The Present button appears only for decks — more than one page, or a single
   page in a 16:9 or 4:3 aspect ratio — mirroring the web app's automatic
   detection, and stays out of the way for ordinary documents.
@@ -67,6 +74,9 @@ Positive
 - | **Keeps up with edits**
   | Saving while presenting refreshes the slides in place and preserves the
   | current slide, so a late fix does not restart the talk.
+- | **Speaker mode without a server round-trip**
+  | The console and the audience window share the deck over a
+  | ``BroadcastChannel``; nothing is added to the server for the second display.
 
 Negative
 ~~~~~~~~
@@ -74,9 +84,9 @@ Negative
 - | **SVG only**
   | Slides are rendered SVG, not a PDF viewer, so there is no text selection or
   | PDF outline in presentation mode.
-- | **No presenter window or notes yet**
-  | Speaker notes, a second-monitor presenter view, the timer and the laser and
-  | pen tools are not part of this change.
+- | **No speaker notes yet**
+  | The console shows the deck and the timings; speaker notes, the laser pointer
+  | and the pen tools are not part of this change.
 - | **Animation steps are pages**
   | ``#pause`` steps appear as separate slides, which matches the PDF but means
   | the slide count is the page count.
