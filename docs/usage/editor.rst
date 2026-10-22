@@ -148,3 +148,27 @@ The **Generate** split button exports the current document as **PDF**, a ZIP of
 **PNG** pages (with an overview grid), or — when the ``typst-pptx`` binary is
 available — **PowerPoint** (``.pptx``). PowerPoint output is editable and
 requires decks built with Touying 0.8 or newer.
+
+Presentation mode
+~~~~~~~~~~~~~~~~~
+
+A **Present** button appears next to the zoom controls when the previewed file
+looks like a deck: anything with more than one page, or a single page in a 16:9
+or 4:3 aspect ratio. It plays the rendered pages full screen, one slide at a
+time — animated builds included, because every animation step is already its own
+page.
+
+Presenting follows the same keys as the Typst web app:
+
+* :kbd:`→`, :kbd:`Space`, :kbd:`Enter`, :kbd:`PageDown`, :kbd:`↓` or a left
+  click — next slide.
+* :kbd:`←`, :kbd:`PageUp`, :kbd:`↑` or a right click — previous slide.
+* :kbd:`Home` / :kbd:`End` — first / last slide.
+* :kbd:`Esc` — leave presentation mode.
+
+A counter shows the current slide for a moment after each move. The deck keeps
+up with the preview, so saving while presenting refreshes the slides in place
+and stays on the current one.
+
+Presenting is read-only and available to anyone who can view the bucket. Speaker
+notes and a separate presenter window are planned for a later release.
