@@ -154,7 +154,11 @@ export class PreviewManager {
     const col = Math.max(SINGLE_ITEM, diag.column)
     this.app.tabPositions[diag.file] = { line: diag.line, col }
     await this.app.editor.openFile(diag.file)
-    this.app.els.editor.setCursor(diag.line, col)
+    const place = () => this.app.els.editor.setCursor(diag.line, col)
+    place()
+    // The collab adopt can replace the document a tick later and reset the
+    // caret; re-assert it once on the next frame.
+    requestAnimationFrame(place)
   }
 
   /** Create a span with a class and text content. */
