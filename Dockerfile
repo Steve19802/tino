@@ -2,6 +2,8 @@ FROM python:3.14-slim
 
 # renovate: github-releases depName=typst/typst
 ARG TYPST_VERSION=0.15.1
+# renovate: github-releases depName=Steve19802/typst-pptx
+ARG TYPST_PPTX_VERSION=0.1.0
 
 # Populated automatically by BuildKit/buildx from the target platform.
 ARG TARGETARCH
@@ -23,6 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl git git-lf
        esac \
     && curl -sSfL https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-${TYPST_TARGET}.tar.xz \
        | tar -xJ --strip-components=1 -C /usr/local/bin typst-${TYPST_TARGET}/typst \
+    && curl -fsSL "https://github.com/Steve19802/typst-pptx/releases/download/v${TYPST_PPTX_VERSION}/typst-pptx-${TYPST_TARGET}.tar.xz" \
+       | tar -xJ -C /tmp \
+    && install -m 755 "/tmp/typst-pptx-${TYPST_TARGET}/typst-pptx" /usr/local/bin/typst-pptx \
+    && mkdir -p /usr/local/share/typst-pptx \
+    && cp "/tmp/typst-pptx-${TYPST_TARGET}/LICENSE" "/tmp/typst-pptx-${TYPST_TARGET}/NOTICE" /usr/local/share/typst-pptx/ \
+    && rm -rf "/tmp/typst-pptx-${TYPST_TARGET}" \
     && git lfs install --system \
     && git config --system core.attributesFile /etc/gitattributes \
     && apt-get purge -y --auto-remove xz-utils \
