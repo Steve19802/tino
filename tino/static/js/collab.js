@@ -90,7 +90,10 @@ export class CollabSession {
     if (!synced || this._bound || !this._ytext)
       return
     const local = this._editor.content
+    const caret = this._editor.caret
     this._editor.setContent(this._ytext.toString())
+    // Replacing the whole document maps the caret to line 1; restore it.
+    this._editor.setCursor(caret.line, caret.col)
     this._bindCollab()
     if (this._preserveLocal)
       this._reconcile(local)

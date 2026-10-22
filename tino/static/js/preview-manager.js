@@ -150,9 +150,11 @@ export class PreviewManager {
   /** Open the diagnostic's file and move the caret to its position. */
 
   async _jumpToDiagnostic(diag) {
+    // Record the target as the tab's caret so it also survives a collab re-sync.
+    const col = Math.max(SINGLE_ITEM, diag.column)
+    this.app.tabPositions[diag.file] = { line: diag.line, col }
     await this.app.editor.openFile(diag.file)
-    // Typst can report column 0; setCursor is 1-based.
-    this.app.els.editor.setCursor(diag.line, Math.max(SINGLE_ITEM, diag.column))
+    this.app.els.editor.setCursor(diag.line, col)
   }
 
   /** Create a span with a class and text content. */
