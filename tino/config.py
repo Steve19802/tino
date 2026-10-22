@@ -25,6 +25,7 @@ __all__ = (
     'TINO_OIDC_DISCOVERY_URL',
     'TINO_OIDC_GROUPS_CLAIM',
     'TINO_PACKAGE_DIR',
+    'TINO_PPTX_BINARY',
     'TINO_ROOM_TTL',
     'TINO_SAVE_DEBOUNCE_MS',
     'TINO_SECRET_KEY',
@@ -155,6 +156,17 @@ TINO_MCP_INSTRUCTIONS = environ.get('TINO_MCP_INSTRUCTIONS') or None
 #: default, so agents can edit and compile files but never commit — humans
 #: review and commit via the UI.
 TINO_MCP_COMMIT_ENABLED = environ.get('TINO_MCP_COMMIT_ENABLED', '').lower() in _TRUEISH
+
+
+# ----- 📽️ PowerPoint export -----
+
+#: ⭕ The ``typst-pptx`` binary used to export editable PowerPoint files.
+#:
+#: .. note::
+#:  When the binary cannot be found on ``$PATH``, PowerPoint export is
+#:  disabled: it is reported as unavailable by ``/health`` and ``/api/config``
+#:  and the export endpoints answer with ``501``.
+TINO_PPTX_BINARY = environ.get('TINO_PPTX_BINARY', 'typst-pptx')
 
 
 # ----- ⚙️ Application settings -----

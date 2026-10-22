@@ -38,7 +38,7 @@ from ..auth import ROLE_HIERARCHY, resolve_role
 from ..dependencies import get_bucket_font_service, get_bucket_service, get_collab_manager, \
     get_compiler_service, get_file_service, get_git_service, get_notifier, get_search_service
 from ..models import User
-from ..services.compiler import CompileError, typst_version, zip_pngs
+from ..services.compiler import CompileError, pptx_version, typst_version, zip_pngs
 from ..services.file import apply_hunks
 from .instructions import server_instructions
 
@@ -966,6 +966,47 @@ def compile_png(  # pylint: disable=too-many-arguments,too-many-positional-argum
         'overview': result['overview'] is not None,
         'zip': base64.b64encode(archive).decode('ascii'),
         'size': len(archive),
+    }
+
+
+@_tool()
+def compile_pptx(bucket: str, path: str, animations: str = 'auto') -> dict:
+    '''Export a Typst file as an editable PowerPoint (.pptx) presentation.
+
+    Requires Touying 0.8 or newer. Returns ``{"success": true,
+    "typst_pptx_version": "...", "pptx": "<base64>", "size": N,
+    "report": {...}}`` or ``{"success": false, "error": "...",
+    "diagnostics": [...]}``. The *report* says what was exported natively vs.
+    baked as a picture (its ``baked`` list) — read it to see what won't be
+    editable in PowerPoint. *animations* is ``auto``, ``none`` or ``slides``.
+    '''
+    logger.debug('MCP compile_pptx called: bucket=%s, path=%s', bucket, path)
+    _require(bucket, 'viewer')
+
+    if pptx_version() is None:
+        raise ToolError('PPTX export is not available (typst-pptx is not installed)')
+
+    try:
+        pptx_path, report = get_compiler_service().compile_pptx(
+            bucket, path, animations=animations)
+        try:
+            data = pptx_path.read_bytes()
+        finally:
+            pptx_path.unlink(missing_ok=True)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+    except CompileError as exc:
+        return {'success': False, 'error': str(exc), 'diagnostics': exc.diagnostics}
+    except (ValueError, RuntimeError) as exc:
+        return {'success': False, 'error': str(exc)}
+
+    logger.info('MCP exported %s/%s to PPTX (%d bytes)', bucket, path, len(data))
+    return {
+        'success': True,
+        'typst_pptx_version': pptx_version(),
+        'pptx': base64.b64encode(data).decode('ascii'),
+        'size': len(data),
+        'report': report,
     }
 
 
