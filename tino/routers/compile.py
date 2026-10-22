@@ -1,4 +1,4 @@
-'''REST endpoints for compiling Typst files to SVG, PDF, or PNG.'''
+'''REST endpoints for compiling Typst files to SVG, PDF, PNG, or PowerPoint.'''
 
 import logging
 
@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from ..dependencies import get_compiler_service, require_viewer
-from ..services.compiler import CompileError, CompilerService, zip_pngs
+from ..services.compiler import CompileError, CompilerService, pptx_version, zip_pngs
 
 logger = logging.getLogger(__name__)
 
@@ -110,4 +110,50 @@ async def compile_png(  # pylint: disable=too-many-arguments,too-many-positional
         content=zip_pngs(result['pages'], result['overview']),
         media_type='application/zip',
         headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get('/pptx/{path:path}')
+async def compile_pptx(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    slug: str, path: str,
+    animations: str = 'auto',
+    user=Depends(require_viewer),
+    svc: CompilerService = Depends(get_compiler_service),
+):
+    '''Export a .typ file as an editable PowerPoint (.pptx).
+
+    *animations* is ``auto``, ``none`` or ``slides`` (default ``auto``). Answers
+    501 when ``typst-pptx`` isn't installed; the response carries an
+    ``X-Tino-Pptx-Fallbacks`` header with the number of items that could only be
+    exported as pictures. Requires Touying 0.8 or newer.
+    '''
+    if pptx_version() is None:
+        raise HTTPException(
+            501, 'PPTX export is not available (typst-pptx is not installed)')
+    logger.info('Exporting PPTX for %s/%s (user: %s)', slug, path, user.username)
+    try:
+        pptx_path, report = svc.compile_pptx(slug, path, animations=animations)
+
+    except FileNotFoundError as exc:
+        raise HTTPException(404, 'File not found') from exc
+
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    except CompileError as exc:
+        raise _compile_failed(exc) from exc
+
+    except RuntimeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    filename = path.rsplit('/', maxsplit=1)[-1].rsplit('.', maxsplit=1)[0] + '.pptx'
+    return FileResponse(
+        pptx_path,
+        filename=filename,
+        media_type=(
+            'application/vnd.openxmlformats-officedocument'
+            '.presentationml.presentation'
+        ),
+        headers={'X-Tino-Pptx-Fallbacks': str(len(report.get('baked', [])))},
+        background=BackgroundTask(pptx_path.unlink, missing_ok=True),
     )

@@ -42,6 +42,16 @@ jobs:
       - run: pip install -e .[develop]
       - run: make test-pylint
 
+  test-pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: pip install -e .[develop]
+      - run: make test-pytest
+
   test-eslint:
     runs-on: ubuntu-latest
     steps:
@@ -62,12 +72,25 @@ jobs:
       - run: npm install
       - run: make test-stylelint
 
+  pptx-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify typst-pptx pairs with Typst
+        run: |
+          typst=$(grep -oP 'TYPST_VERSION=\K[0-9.]+' Dockerfile)
+          pptx=$(grep -oP 'TYPST_PPTX_VERSION=\K[0-9.]+' Dockerfile)
+          name=$(curl -fsSL "https://api.github.com/repos/Steve19802/typst-pptx/releases/tags/v${pptx}" | jq -r .name)
+          embedded=$(printf '%s' "$name" | grep -oP '\(typst \K[0-9.]+')
+          echo "Typst $typst | typst-pptx $pptx (built with Typst $embedded)"
+          test "$typst" = "$embedded"
+
   # ──────────────────────────────────────────────
   # 🔨 Build
   # ──────────────────────────────────────────────
 
   vendor-css:
-    needs: [test-isort, test-pycodestyle, test-pylint, test-eslint, test-stylelint]
+    needs: [test-isort, test-pycodestyle, test-pylint, test-pytest, test-eslint, test-stylelint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -78,7 +101,7 @@ jobs:
           path: tino/static/css/vendor/
 
   vendor-js:
-    needs: [test-isort, test-pycodestyle, test-pylint, test-eslint, test-stylelint]
+    needs: [test-isort, test-pycodestyle, test-pylint, test-pytest, test-eslint, test-stylelint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

@@ -29,9 +29,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve matching typst-pptx release
+        id: pptx
+        if: steps.current.outputs.version != steps.latest.outputs.version
+        run: |
+          tag=$(gh release list --repo Steve19802/typst-pptx --limit 50 \
+                  --json tagName,name --jq \
+                  '.[] | select(.name | contains("(typst ${{ steps.latest.outputs.version }})")) | .tagName' \
+                | head -1)
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Update Dockerfile
         if: steps.current.outputs.version != steps.latest.outputs.version
-        run: sed -i "s/TYPST_VERSION=${{ steps.current.outputs.version }}/TYPST_VERSION=${{ steps.latest.outputs.version }}/" Dockerfile
+        run: |
+          sed -i "s/TYPST_VERSION=${{ steps.current.outputs.version }}/TYPST_VERSION=${{ steps.latest.outputs.version }}/" Dockerfile
+          if [ -n "${{ steps.pptx.outputs.version }}" ]; then
+            sed -i "s/ARG TYPST_PPTX_VERSION=.*/ARG TYPST_PPTX_VERSION=${{ steps.pptx.outputs.version }}/" Dockerfile
+          fi
 
       - name: Create PR
         if: steps.current.outputs.version != steps.latest.outputs.version
@@ -41,6 +57,7 @@ jobs:
           title: 'Update Typst to ${{ steps.latest.outputs.version }}'
           body: |
             Updates Typst from `${{ steps.current.outputs.version }}` to `${{ steps.latest.outputs.version }}`.
+            Also bumps `typst-pptx` to `${{ steps.pptx.outputs.version }}` so the PowerPoint exporter stays paired with Typst.
 
             Release: https://github.com/typst/typst/releases/tag/v${{ steps.latest.outputs.version }}
           commit-message: 'Update Typst to ${{ steps.latest.outputs.version }}'

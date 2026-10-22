@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 from .. import config
 from ..dependencies import require_global_admin
 from ..mcp.instructions import server_instructions
-from ..services.compiler import typst_version
+from ..services.compiler import pptx_version, typst_version
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ def _count_buckets() -> int:
 
 _APP_VERSION = _app_version()
 _TYPST_VERSION = typst_version()
+_PPTX_VERSION = pptx_version()
 
 
 @router.get('/health')
@@ -44,6 +45,7 @@ async def health():
         'status': 'ok',
         'version': _APP_VERSION,
         'typst': _TYPST_VERSION,
+        'typst_pptx': _PPTX_VERSION,
         'buckets': _count_buckets(),
     }
 
@@ -54,6 +56,7 @@ async def frontend_config():
     return {
         'saveDebounceMs': config.TINO_SAVE_DEBOUNCE_MS,
         'version': _APP_VERSION,
+        'pptxVersion': _PPTX_VERSION,
     }
 
 

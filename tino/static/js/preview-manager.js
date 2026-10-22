@@ -14,6 +14,7 @@ export class PreviewManager {
   constructor(app) {
     this.app = app
     this.exportFormat = 'pdf'
+    this.exportAnimations = 'auto'
   }
 
   /** The file the preview renders: the pinned file, else the active file. */
@@ -32,6 +33,9 @@ export class PreviewManager {
     this._renderPinControls()
     document.getElementById('btn-export')
       .classList.toggle('hidden', !isTyp)
+    const hasPptx = Boolean(this.app.config && this.app.config.pptxVersion)
+    document.getElementById('export-pptx').classList.toggle('hidden', !hasPptx)
+    document.getElementById('export-animations').classList.toggle('hidden', !hasPptx)
     if (isTyp)
       await this.compile()
     else
@@ -121,25 +125,72 @@ export class PreviewManager {
   /** Download the current .typ file as a compiled PDF. */
 
   downloadPdf() {
-    this._download('pdf')
+    return this._download('pdf')
   }
 
   /** Download the current .typ file as a ZIP of rendered PNG pages. */
 
   downloadPng() {
-    this._download('png')
+    return this._download('png')
+  }
+
+  /** Download the current .typ file as an editable PowerPoint (.pptx). */
+
+  downloadPptx() {
+    return this._download('pptx')
   }
 
   /** Trigger a browser download of the current file in *format*. */
 
-  _download(format) {
+  async _download(format) {
     if (!this.app.bucket || !this.target)
       return
     const slug = encodeURIComponent(this.app.bucket)
-    const query = format === 'png' ? '?overview=true' : ''
+    const params = new URLSearchParams()
+    if (format === 'png')
+      params.set('overview', 'true')
+    if (format === 'pptx')
+      params.set('animations', this.exportAnimations)
+    const query = params.toString() ? `?${params}` : ''
+    const url = `/api/buckets/${slug}/compile/${format}/${this.target}${query}`
+
+    if (format !== 'pptx') {
+      PreviewManager._saveUrl(url)
+      return
+    }
+
+    // PowerPoint: read the fallback count from the response header for a toast.
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' })
+      if (!res.ok)
+        throw new Error((await res.text()) || `Export failed (${res.status})`)
+      const fallbacks = Number(res.headers.get('X-Tino-Pptx-Fallbacks') || '0')
+      const objectUrl = URL.createObjectURL(await res.blob())
+      PreviewManager._saveUrl(objectUrl, this._exportName('pptx'))
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
+      if (fallbacks > 0) {
+        this.app.toast.info(
+          `${fallbacks} element(s) exported as pictures, not editable text.`,
+        )
+      }
+    }
+    catch (err) {
+      this.app.toast.error(err.message)
+    }
+  }
+
+  /** The current file's name with *extension* (e.g. ``slides.pptx``). */
+
+  _exportName(extension) {
+    return this.target.split('/').pop().replace(/\.typ$/u, `.${extension}`)
+  }
+
+  /** Trigger a download for *url*, optionally under a given file name. */
+
+  static _saveUrl(url, name = '') {
     const link = document.createElement('a')
-    link.href = `/api/buckets/${slug}/compile/${format}/${this.target}${query}`
-    link.download = ''
+    link.href = url
+    link.download = name
     link.click()
   }
 
@@ -148,6 +199,8 @@ export class PreviewManager {
   exportCurrent() {
     if (this.exportFormat === 'png')
       this.downloadPng()
+    else if (this.exportFormat === 'pptx')
+      this.downloadPptx()
     else
       this.downloadPdf()
   }
@@ -156,11 +209,14 @@ export class PreviewManager {
 
   setExportFormat(format) {
     this.exportFormat = format
-    const isPng = format === 'png'
-    document.getElementById('btn-export-label').textContent =
-      isPng ? 'Generate PNGs' : 'Generate PDF'
-    document.getElementById('btn-export-main').title =
-      isPng ? 'Download PNGs (ZIP)' : 'Download PDF'
+    const labels = {
+      pdf: ['Generate PDF', 'Download PDF'],
+      png: ['Generate PNGs', 'Download PNGs (ZIP)'],
+      pptx: ['Generate PowerPoint', 'Download PowerPoint (.pptx)'],
+    }
+    const [label, title] = labels[format] || labels.pdf
+    document.getElementById('btn-export-label').textContent = label
+    document.getElementById('btn-export-main').title = title
   }
 
   /** Close the export format menu. */
@@ -174,7 +230,7 @@ export class PreviewManager {
       .setAttribute('aria-expanded', 'false')
   }
 
-  /** Bind zoom (buttons + Ctrl+wheel), export (PDF/PNG), and pin controls. */
+  /** Bind zoom (buttons + Ctrl+wheel), export (PDF/PNG/PPTX), and pin. */
 
   bindZoom() {
     document.getElementById('btn-zoom-in')
@@ -207,6 +263,14 @@ export class PreviewManager {
       this.setExportFormat(item.dataset.format)
       this.exportCurrent()
     })
+
+    document.getElementById('export-animations')
+      .addEventListener('click', evt => evt.stopPropagation())
+
+    document.getElementById('export-animations-select')
+      .addEventListener('change', evt => {
+        this.exportAnimations = evt.target.value
+      })
 
     document.addEventListener('click', () => this._closeExportMenu())
     document.addEventListener('keydown', evt => {

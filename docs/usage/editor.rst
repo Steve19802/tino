@@ -143,3 +143,8 @@ The right-hand panel shows an SVG preview of the current ``.typ`` file.
 The preview is re-rendered automatically after each save.
 
 Use the **Zoom in** / **Zoom out** buttons (or the displayed percentage) to adjust the preview scale.
+
+The **Generate** split button exports the current document as **PDF**, a ZIP of
+**PNG** pages (with an overview grid), or — when the ``typst-pptx`` binary is
+available — **PowerPoint** (``.pptx``). PowerPoint output is editable and
+requires decks built with Touying 0.8 or newer.

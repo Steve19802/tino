@@ -15,6 +15,8 @@ Use these tools to list, read, write, compile, and commit Typst source files.
 Always compile after editing to verify the document is valid.
 Use ``compile_png`` to rasterise a document's pages to PNG (add ``overview``
 for a grid image of every page) when you need to inspect the rendered output.
+Use ``compile_pptx`` to export editable PowerPoint slides (Touying 0.8 or
+newer); read ``report.baked`` to see what couldn't be exported natively.
 Each bucket may have specific instructions.
 Always list buckets first and follow any per-bucket guidance.
 To locate a document by file name or content, use the ``search`` tool instead of

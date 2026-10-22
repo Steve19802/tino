@@ -1,10 +1,12 @@
-'''Typst compiler service. Shells out to the `typst` CLI to produce SVG, PDF, or PNG output.'''
+'''Typst compiler service. Shells out to the `typst` and `typst-pptx` CLIs.'''
 
 import base64
+import json
 import logging
 import math
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -16,12 +18,16 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 from PIL import Image
 
+from .. import config
+
 logger = logging.getLogger(__name__)
 
 #: Wall-clock limit for SVG/PDF compilation.
 _COMPILE_TIMEOUT = 30
 #: Wall-clock limit for PNG rasterisation, which is much slower than PDF.
 _IMAGE_TIMEOUT = 120
+#: Wall-clock limit for PowerPoint export, which is slower again.
+_PPTX_TIMEOUT = 90
 
 #: Allowed pixels-per-inch range and default for PNG output.
 _DEFAULT_PPI = 144
@@ -34,14 +40,26 @@ _OVERVIEW_MAX_HEIGHT = 2000
 _OVERVIEW_BACKGROUND = (200, 200, 200)
 _OVERVIEW_GUTTER = 8
 
+#: Typst-pptx ``--version`` line, e.g. ``typst-pptx 0.1.0 (typst 0.15.1)``.
+_PPTX_VERSION_RE = re.compile(r'^typst-pptx (\S+) \(typst (\S+)\)$')
+
+#: Allowed ``typst-pptx --animations`` values and the default.
+_PPTX_ANIMATIONS = frozenset({'auto', 'none', 'slides'})
+_DEFAULT_ANIMATIONS = 'auto'
+
 #: Typst error/warning header and its ``┌─ file:line:col`` location line.
 _SEVERITY_RE = re.compile(r'^(error|warning): ?(.*)$')
-_HELP_RE     = re.compile(r'^help:')
 _LOCATION_RE = re.compile(r'^\s*┌─\s+(.*):(\d+):(\d+)\s*$')
+
+#: Short-format diagnostic: ``file:line:col: severity: message``.
+_SHORT_RE = re.compile(r'^(.*?):(\d+):(\d+): (error|warning): ?(.*)$')
+
+#: Help/hint continuation lines (``help:`` / ``= hint:``), never diagnostics.
+_HINT_RE = re.compile(r'^\s*(?:=\s*)?(?:help|hint):')
 
 
 class CompileError(RuntimeError):
-    '''Failed Typst compilation holding its diagnostics and raw stderr.'''
+    '''Failed compilation holding its diagnostics and raw stderr.'''
 
     def __init__(self, stderr: str, diagnostics: list[dict]):
         super().__init__(stderr or 'Compilation failed')
@@ -49,15 +67,32 @@ class CompileError(RuntimeError):
 
 
 def parse_diagnostics(stderr: str) -> list[dict]:
-    '''Pull the individual errors/warnings out of Typst's stderr.
+    '''Pull the individual errors/warnings out of compiler stderr.
+
+    Handles both Typst's human format (``error: …`` with a following
+    ``┌─ file:line:col`` line) and the short format emitted by
+    ``--diagnostic-format short`` (``file:line:col: error: …``), including
+    messages with no location and trailing ``help:``/``= hint:`` lines.
 
     Each entry is ``{severity, message, file, line, column}``; file/line/column
-    are None when Typst reports no position.
+    are None when no position is reported.
     '''
     diagnostics: list[dict] = []
     current: dict | None = None
 
     for raw_line in stderr.splitlines():
+        short = _SHORT_RE.match(raw_line)
+        if short:
+            current = {
+                'severity': short.group(4),
+                'message': short.group(5).strip(),
+                'file': short.group(1),
+                'line': int(short.group(2)),
+                'column': int(short.group(3)),
+            }
+            diagnostics.append(current)
+            continue
+
         severity = _SEVERITY_RE.match(raw_line)
         if severity:
             current = {
@@ -68,8 +103,8 @@ def parse_diagnostics(stderr: str) -> list[dict]:
             diagnostics.append(current)
             continue
 
-        # Skip help blocks, but let them close the current diagnostic.
-        if _HELP_RE.match(raw_line):
+        # Skip help/hint blocks, but let them close the current diagnostic.
+        if _HINT_RE.match(raw_line):
             current = None
             continue
 
@@ -159,6 +194,14 @@ def zip_pngs(pages: list[bytes], overview: bytes | None = None) -> bytes:
     return buffer.getvalue()
 
 
+def _read_pptx_report(path: Path) -> dict:
+    '''Return the parsed typst-pptx report, or an empty dict when absent.'''
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
 #: Mime type per font file suffix for @font-face data URIs.
 _FONT_MIMES = {
     '.ttf': 'font/ttf',
@@ -202,6 +245,29 @@ def typst_version() -> str | None:
         return CompilerService.version()
     except Exception:  # pylint: disable=broad-exception-caught
         return None
+
+
+@lru_cache
+def pptx_binary() -> str | None:
+    '''Return the path to the typst-pptx binary, or None when it isn't installed.'''
+    return shutil.which(config.TINO_PPTX_BINARY)
+
+
+@lru_cache
+def pptx_version() -> str | None:
+    '''Return the typst-pptx ``--version`` line, or None when unavailable.'''
+    binary = pptx_binary()
+    if binary is None:
+        return None
+    try:
+        result = subprocess.run(
+            [binary, '--version'], capture_output=True, text=True,
+            timeout=_COMPILE_TIMEOUT, check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    line = result.stdout.strip()
+    return line if _PPTX_VERSION_RE.match(line) else None
 
 
 def _font_signature(dirs: tuple[Path, ...]) -> tuple:
@@ -425,6 +491,51 @@ class CompilerService:
 
         return {'pages': pages, 'overview': grid}
 
+    def compile_pptx(  # pylint: disable=too-many-locals
+        self, slug: str, path: str, animations: str = _DEFAULT_ANIMATIONS,
+    ) -> tuple[Path, dict]:
+        '''Export a Typst file to an editable PowerPoint file with typst-pptx.
+
+        Returns ``(pptx_path, report)``: the path to a temporary ``.pptx`` (the
+        caller deletes it, e.g. via a FileResponse BackgroundTask) and the JSON
+        report ``typst-pptx`` wrote — its ``baked`` list counts the items that
+        could only be exported as pictures. Requires Touying 0.8 or newer.
+        Raises FileNotFoundError if the source is missing, ValueError for an
+        unknown *animations*, RuntimeError if ``typst-pptx`` isn't installed, or
+        CompileError if the export fails.
+        '''
+        binary = pptx_binary()
+        if binary is None:
+            raise RuntimeError('typst-pptx is not available')
+        if animations not in _PPTX_ANIMATIONS:
+            raise ValueError(
+                f'animations must be one of: {", ".join(sorted(_PPTX_ANIMATIONS))}')
+        bucket_dir, source = self._resolve_source(slug, path)
+        logger.info('Exporting PPTX for %s/%s (animations=%s)', slug, path, animations)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / f'{source.stem}.pptx'
+            report_path = Path(tmp) / 'report.json'
+            result = subprocess.run(
+                self._build_pptx_cmd(binary, source, output, bucket_dir, slug,
+                                     animations, report_path),
+                cwd=str(bucket_dir), capture_output=True, text=True,
+                encoding='utf-8', errors='replace',
+                timeout=_PPTX_TIMEOUT, check=False,
+            )
+            if result.returncode != 0:
+                stderr = self._strip_paths(result.stderr.strip(), bucket_dir)
+                logger.warning('PPTX export failed for %s: %s', source, stderr)
+                raise CompileError(stderr, parse_diagnostics(stderr))
+
+            report = _read_pptx_report(report_path)
+            handle, name = tempfile.mkstemp(suffix='.pptx')
+            os.close(handle)
+            final = Path(name)
+            final.write_bytes(output.read_bytes())
+
+        return final, report
+
     # ── Internal ──
 
     def _render_svgs(self, source, bucket_dir, slug):
@@ -600,5 +711,25 @@ class CompilerService:
             cmd.extend(['--font-path', os.pathsep.join(font_paths)])
 
         cmd.extend(['--root', str(root), str(source), str(output)])
+
+        return cmd
+
+    def _build_pptx_cmd(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self, binary, source, output, root, slug, animations, report,
+    ):
+        '''Assemble the typst-pptx export argument list.'''
+        cmd = [
+            binary, 'compile', '--diagnostic-format', 'short',
+            '--root', str(root), '--animations', animations, '--report', str(report),
+        ]
+
+        if self.package_dir:
+            cmd.extend(['--package-path', str(self.package_dir)])
+
+        font_paths = [str(path) for path in self._font_paths(slug)]
+        if font_paths:
+            cmd.extend(['--font-path', os.pathsep.join(font_paths)])
+
+        cmd.extend([str(source), str(output)])
 
         return cmd
