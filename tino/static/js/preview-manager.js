@@ -1,7 +1,8 @@
 import {
   PREVIEW_PAGE_WIDTH, SINGLE_ITEM, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP,
-  ZOOM_WHEEL_FACTOR, escapeHtml,
+  ZOOM_WHEEL_FACTOR,
 } from './constants.js'
+import { HttpClient } from './http-client.js'
 
 /**
  * Manages preview rendering and zoom controls.
@@ -102,11 +103,74 @@ export class PreviewManager {
         PreviewManager._renderPages(preview, result.pages)
     }
     catch (err) {
-      if (gen === this._renderGen) {
-        preview.innerHTML =
-          `<pre class="preview-error">${escapeHtml(err.message)}</pre>`
-      }
+      if (gen === this._renderGen)
+        this._renderError(preview, err)
     }
+  }
+
+  /** Render a compile error: structured diagnostics, or the raw message. */
+
+  _renderError(preview, err) {
+    const diagnostics = err.diagnostics || []
+    if (diagnostics.length)
+      preview.replaceChildren(this._renderDiagnostics(diagnostics))
+    else
+      preview.replaceChildren(PreviewManager._renderRawError(err.message))
+  }
+
+  /** Build the list of diagnostics. */
+
+  _renderDiagnostics(diagnostics) {
+    const list = document.createElement('div')
+    list.className = 'preview-errors'
+    diagnostics.forEach(diag => list.appendChild(this._renderDiagnostic(diag)))
+    return list
+  }
+
+  /** Build one diagnostic entry, clickable only when it has a location. */
+
+  _renderDiagnostic(diag) {
+    const item = document.createElement(diag.file ? 'button' : 'div')
+    item.className = `preview-error-item preview-error-${diag.severity}`
+    item.appendChild(PreviewManager._span('preview-error-message', diag.message))
+    if (diag.file)
+      this._makeClickable(item, diag)
+    return item
+  }
+
+  /** Wire the entry to jump to its location on click. */
+
+  _makeClickable(item, diag) {
+    item.appendChild(PreviewManager._span(
+      'preview-error-loc', `${diag.file}:${diag.line}:${diag.column}`))
+    item.type = 'button'
+    item.addEventListener('click', () => this._jumpToDiagnostic(diag))
+  }
+
+  /** Open the diagnostic's file and move the caret to its position. */
+
+  async _jumpToDiagnostic(diag) {
+    await this.app.editor.openFile(diag.file)
+    // Typst can report column 0; setCursor is 1-based.
+    this.app.els.editor.setCursor(diag.line, Math.max(SINGLE_ITEM, diag.column))
+  }
+
+  /** Create a span with a class and text content. */
+
+  static _span(className, text) {
+    const span = document.createElement('span')
+    span.className = className
+    span.textContent = text
+    return span
+  }
+
+  /** Fallback when there are no structured diagnostics. */
+
+  static _renderRawError(message) {
+    const pre = document.createElement('pre')
+    pre.className = 'preview-error'
+    pre.textContent = message
+    return pre
   }
 
   /** Build all SVG pages off-DOM and swap them in with a single reflow. */
@@ -154,24 +218,20 @@ export class PreviewManager {
     const query = params.toString() ? `?${params}` : ''
     const url = `/api/buckets/${slug}/compile/${format}/${this.target}${query}`
 
-    if (format !== 'pptx') {
-      PreviewManager._saveUrl(url)
-      return
-    }
-
-    // PowerPoint: read the fallback count from the response header for a toast.
     try {
       const res = await fetch(url, { credentials: 'same-origin' })
       if (!res.ok)
-        throw new Error((await res.text()) || `Export failed (${res.status})`)
-      const fallbacks = Number(res.headers.get('X-Tino-Pptx-Fallbacks') || '0')
+        throw await HttpClient._error(res)
       const objectUrl = URL.createObjectURL(await res.blob())
-      PreviewManager._saveUrl(objectUrl, this._exportName('pptx'))
+      PreviewManager._saveUrl(objectUrl, this._exportName(format))
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
-      if (fallbacks > 0) {
-        this.app.toast.info(
-          `${fallbacks} element(s) exported as pictures, not editable text.`,
-        )
+      if (format === 'pptx') {
+        const fallbacks = Number(res.headers.get('X-Tino-Pptx-Fallbacks') || '0')
+        if (fallbacks > 0) {
+          this.app.toast.info(
+            `${fallbacks} element(s) exported as pictures, not editable text.`,
+          )
+        }
       }
     }
     catch (err) {
@@ -179,9 +239,10 @@ export class PreviewManager {
     }
   }
 
-  /** The current file's name with *extension* (e.g. ``slides.pptx``). */
+  /** The current file's name with the export's extension. */
 
-  _exportName(extension) {
+  _exportName(format) {
+    const extension = format === 'png' ? 'zip' : format
     return this.target.split('/').pop().replace(/\.typ$/u, `.${extension}`)
   }
 
