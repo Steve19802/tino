@@ -1260,10 +1260,16 @@ button.preview-error-item:hover {
   align-items: center;
 }
 
+/*
+ * Both presentation overlays sit above CodeMirror's panels, which are
+ * position: sticky with z-index 300 — the Vim status bar among them — and
+ * would otherwise show through the presentation.
+ */
+
 .presentation {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1361,7 +1367,7 @@ button.preview-error-item:hover {
 .presenter {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 500;
   display: grid;
   grid-template:
     "main side" minmax(0, 1fr)
@@ -1606,11 +1612,13 @@ button.preview-error-item:hover {
 
 /* ── Dialog / Modal ── */
 
+/* Above CodeMirror's panels, so the Vim status bar cannot show through one. */
+
 .dialog-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 400;
   background: rgb(0 0 0 / 40%);
   align-items: center;
   justify-content: center;
@@ -2766,15 +2774,28 @@ textarea.form-input {
 
 /* ── Toast notifications ── */
 
+/* Above the presentation overlays, so a toast is never hidden by them. */
+
 .toast-container {
   position: fixed;
   bottom: 16px;
   right: 16px;
-  z-index: 200;
+  z-index: 600;
   display: flex;
   flex-direction: column-reverse;
   gap: 8px;
   pointer-events: none;
+}
+
+/*
+ * While a presentation is on screen, lift the toasts above its bottom bars —
+ * the presenter console's controls, and the tab view's slide counter — so a
+ * toast can never sit on top of the buttons.
+ */
+
+body:has(.presentation:not(.hidden)) .toast-container,
+body:has(.presenter:not(.hidden)) .toast-container {
+  bottom: 72px;
 }
 
 .toast {
