@@ -88,6 +88,9 @@ test-pylint:
 	curl -sSfLo .pylintrc $(LINTER_CONFIGS)/pylintrc
 	pylint $(SOURCE_DIRS)
 
+test-pytest:
+	pytest
+
 test-eslint:
 	curl -sSfo eslint.config.mjs $(LINTER_CONFIGS)/eslint.config.mjs
 	npx eslint $(SOURCE_DIRS)/static/js/*.js
@@ -96,7 +99,7 @@ test-stylelint:
 	curl -sSfLo .stylelintrc.yml $(LINTER_CONFIGS)/stylelintrc.yml
 	npx stylelint $(SOURCE_DIRS)/static/css/*.css
 
-test: test-commits test-isort test-pycodestyle test-pylint test-eslint test-stylelint
+test: test-commits test-isort test-pycodestyle test-pylint test-pytest test-eslint test-stylelint
 
 #
 # Build

@@ -48,6 +48,7 @@ develop = [
     'isort',
     'pycodestyle',
     'pylint',
+    'pytest',
     'Sphinx',
     'sphinx-autobuild',
     'sphinxcontrib-mermaid',
@@ -85,3 +86,10 @@ exclude = [
 ]
 
 [tool.setuptools_scm]
+
+
+[tool.pytest.ini_options]
+
+testpaths = [
+    'tests',
+]
