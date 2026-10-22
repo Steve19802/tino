@@ -37,6 +37,7 @@ export class PreviewManager {
     const hasPptx = Boolean(this.app.config && this.app.config.pptxVersion)
     document.getElementById('export-pptx').classList.toggle('hidden', !hasPptx)
     document.getElementById('export-animations').classList.toggle('hidden', !hasPptx)
+    document.getElementById('btn-present').classList.add('hidden')
     if (isTyp)
       await this.compile()
     else
@@ -100,12 +101,23 @@ export class PreviewManager {
     try {
       const result = await this.app.api.compile(this.app.bucket, this.target)
       if (gen === this._renderGen)
-        PreviewManager._renderPages(preview, result.pages)
+        this._publish(preview, result.pages)
     }
     catch (err) {
       if (gen === this._renderGen)
         this._renderError(preview, err)
     }
+  }
+
+  /**
+   * Publish a fresh render: show it in the preview, remember it for the
+   * presentation overlay, and sync the Present button.
+   */
+
+  _publish(preview, pages) {
+    this.lastRender = { bucket: this.app.bucket, pages, target: this.target }
+    PreviewManager._renderPages(preview, pages)
+    this.app.presentation.onPages(this.lastRender)
   }
 
   /** Render a compile error: structured diagnostics, or the raw message. */

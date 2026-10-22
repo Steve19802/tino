@@ -104,3 +104,18 @@ export const STATUS_CLASSES = {
   modified: 'status-modified',
   untracked: 'status-untracked',
 }
+
+/** Aspect ratios (width/height) that mark a page as a slide. */
+
+export const PRESENTATION_RATIOS = [
+  { height: 9, width: 16 },
+  { height: 3, width: 4 },
+]
+
+/** Tolerance when matching a page's aspect ratio to a known slide ratio. */
+
+export const PRESENTATION_RATIO_TOLERANCE = 0.03
+
+/** Time (ms) the slide counter stays visible after navigating. */
+
+export const PRESENTATION_COUNTER_MS = 1600
