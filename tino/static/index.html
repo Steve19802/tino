@@ -200,6 +200,9 @@
           </ul>
         </div>
         <div class="preview-controls">
+          <button class="icon-btn hidden" id="btn-present" title="Present">
+            <span class="material-symbols-outlined">slideshow</span>
+          </button>
           <button class="icon-btn" id="btn-zoom-out" title="Zoom out">
             <span class="material-symbols-outlined">zoom_out</span>
           </button>
@@ -453,6 +456,14 @@
       </div>
 
     </div>
+  </div>
+
+  <div class="presentation hidden" id="presentation" aria-hidden="true">
+    <div class="presentation-stage" id="presentation-stage"></div>
+    <div class="presentation-counter presentation-counter-dim" id="presentation-counter"></div>
+    <button class="presentation-exit" id="btn-present-exit" title="Exit presentation (Esc)">
+      <span class="material-symbols-outlined">close</span>
+    </button>
   </div>
 
   <div class="toast-container" id="toast-container"></div>

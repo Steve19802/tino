@@ -7,6 +7,7 @@ import { FileTree } from './file-tree.js'
 import { FontManager } from './font-manager.js'
 import { GitManager } from './git-manager.js'
 import { PanelResize } from './panel-resize.js'
+import { PresentationManager } from './presentation-manager.js'
 import { PreviewManager } from './preview-manager.js'
 import { SearchModal } from './search-modal.js'
 import { TemplatePicker } from './template-picker.js'
@@ -60,6 +61,9 @@ class TinoApp {
       fileSearch: document.getElementById('file-search'),
       fileTree: document.getElementById('file-tree'),
       logo: document.getElementById('logo'),
+      presentation: document.getElementById('presentation'),
+      presentationCounter: document.getElementById('presentation-counter'),
+      presentationStage: document.getElementById('presentation-stage'),
       previewPage: document.getElementById('preview-page'),
       statusBarModified: document.getElementById('status-bar-modified'),
       tabBar: document.getElementById('tab-bar'),
@@ -78,6 +82,7 @@ class TinoApp {
     this.git = new GitManager(this)
     this.panelResize = new PanelResize()
     this.preview = new PreviewManager(this)
+    this.presentation = new PresentationManager(this)
     this._initDialogs()
   }
 
@@ -121,11 +126,16 @@ class TinoApp {
     this._bindWindowEvents()
     this.editor.bindEditor()
     this._bindFileTree()
+    this._bindDialogs()
+    this.preview.bindZoom()
+    this.presentation.bind()
+  }
+
+  _bindDialogs() {
     this.fontManager.bind()
     this.apiKeyManager.bind()
     this.templatePicker.bind()
     this.searchModal.bind()
-    this.preview.bindZoom()
   }
 
   _bindFileTree() {
@@ -258,11 +268,11 @@ class TinoApp {
       'btn-bucket-history': canView,
       'btn-commit': canCommit,
       'btn-download': canView,
+      'btn-fonts': this.isAdmin || canEdit,
       'btn-history': canView,
       'btn-history-restore': canEdit,
       'btn-save': canEdit,
       'tree-new': canEdit,
-      'btn-fonts': this.isAdmin || canEdit,
     }))
       document.getElementById(id).classList.toggle('hidden', !visible)
   }
