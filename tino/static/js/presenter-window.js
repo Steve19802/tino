@@ -91,6 +91,21 @@ export class PresenterWindow {
     this._post()
   }
 
+  /** Tell the audience what the pointer, the ink and the lights are doing. */
+
+  syncTools(state) {
+    if (!this._open)
+      return
+    this._channel.postMessage({
+      blank: state.blank,
+      colour: state.colour,
+      laser: state.laser,
+      strokes: state.strokes,
+      tool: state.tool,
+      type: 'tools',
+    })
+  }
+
   /** Send the current deck identity, revision and slide to the audience. */
 
   _post() {

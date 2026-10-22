@@ -46,7 +46,10 @@ export class PresentationManager {
       .addEventListener('click', ev => this._menuClick(ev))
     document.addEventListener('click', () => PresentationManager._closeMenu())
     document.addEventListener('keydown', ev => PresentationManager._escape(ev))
-    this.console.bind(action => this.dispatch(action))
+    this.console.bind(
+      action => this.dispatch(action),
+      state => this.audience.syncTools(state),
+    )
     this.audience.bind(
       action => this.dispatch(action),
       () => this._audienceClosed(),

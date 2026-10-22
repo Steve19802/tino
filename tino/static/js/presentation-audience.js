@@ -1,4 +1,5 @@
 import { PRESENTATION_CHANNEL, PRESENTATION_KEYS } from './constants.js'
+import { createSurface, renderInk } from './presentation-ink.js'
 import { PresentationGeometry } from './presentation-geometry.js'
 
 /**
@@ -7,7 +8,7 @@ import { PresentationGeometry } from './presentation-geometry.js'
  * Opened by the presenter console, it listens on the presentation channel for
  * the deck's identity, its revision, and the current slide. It refetches the
  * pages whenever the revision changes, so a recompile mid-talk reaches the
- * projector, and it forwards any navigation performed here to the console.
+ * projector, and it draws and forwards whatever the presenter's pointer does.
  */
 
 export class PresentationAudience {
@@ -17,13 +18,17 @@ export class PresentationAudience {
     this._pages = null
     this._revision = null
     this._index = 0
+    this._blank = false
+    this._laser = null
+    this._strokes = []
     this._channel.addEventListener('message', ev => this._receive(ev.data))
     window.addEventListener('beforeunload', () => this._send('bye'))
   }
 
-  /** Wire the local controls and tell the presenter that we are ready. */
+  /** Build the stage and wire the local controls, then say we are ready. */
 
   init() {
+    this._buildStage()
     document.getElementById('btn-audience-fullscreen')
       .addEventListener('click', () => PresentationAudience._fullscreen())
     const stage = document.getElementById('present-audience-stage')
@@ -33,16 +38,44 @@ export class PresentationAudience {
     this._send('hello')
   }
 
+  /** Give the stage a slide element, with the ink layer over it. */
+
+  _buildStage() {
+    const surface = createSurface()
+    this._slide = surface.slide
+    this._layer = surface.layer
+    document.getElementById('present-audience-stage')
+      .replaceChildren(this._slide, this._layer)
+  }
+
   /** Apply a message from the presenter console. */
 
   _receive(data) {
-    if (!data || data.type !== 'sync')
+    if (!data)
       return
+    if (data.type === 'sync')
+      this._onDeck(data)
+    else if (data.type === 'tools')
+      this._onTools(data)
+  }
+
+  /** Follow the console to the deck, and to the slide, that it announced. */
+
+  _onDeck(data) {
     this._index = data.index
     if (data.revision === this._revision)
       this._show()
     else
       this._load(data)
+  }
+
+  /** Draw what the presenter's pointer, pen and lights are doing. */
+
+  _onTools(state) {
+    this._strokes = state.strokes
+    this._laser = state.laser
+    this._blank = state.blank
+    this._ink()
   }
 
   /** Fetch the deck's pages for the announced revision, then show them. */
@@ -72,8 +105,16 @@ export class PresentationAudience {
     const ratio = PresentationGeometry.pageRatio(this._pages[0])
     if (ratio)
       PresentationAudience._size(ratio)
-    document.getElementById('present-audience-stage').innerHTML =
-      this._pages[this._index] || ''
+    this._slide.innerHTML = this._pages[this._index] || ''
+    this._ink()
+  }
+
+  /** Repaint the ink layer, and hide the slide while the lights are off. */
+
+  _ink() {
+    renderInk(this._layer, this._strokes, this._laser)
+    document.getElementById('present-audience')
+      .classList.toggle('present-audience-blank', this._blank)
   }
 
   /** Handle a key here, forwarding its action to the presenter. */

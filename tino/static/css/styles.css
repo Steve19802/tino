@@ -1271,6 +1271,7 @@ button.preview-error-item:hover {
 }
 
 .presentation-stage {
+  position: relative;
   width: min(100vw, calc(100vh * var(--presentation-ratio, 1.7778)));
   aspect-ratio: var(--presentation-ratio, 1.7778);
   background: #ffffff;
@@ -1281,6 +1282,36 @@ button.preview-error-item:hover {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* A slide is drawn into its own element so the ink layer beside it — the pen's
+   canvas and the laser's dot — survives every slide change. */
+
+.presentation-slide {
+  width: 100%;
+  height: 100%;
+}
+
+.presentation-ink {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.presentation-ink-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.presentation-ink-laser {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: rgb(255 45 45 / 90%);
+  box-shadow: 0 0 14px 5px rgb(255 45 45 / 50%);
 }
 
 .presentation-counter {
@@ -1351,6 +1382,7 @@ button.preview-error-item:hover {
 }
 
 .presenter-stage {
+  position: relative;
   width: min(100cqw, calc(100cqh * var(--presentation-ratio, 1.7778)));
   aspect-ratio: var(--presentation-ratio, 1.7778);
   background: #ffffff;
@@ -1466,6 +1498,44 @@ button.preview-error-item:hover {
   transition: width var(--transition);
 }
 
+.presenter-tool-group {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The bar sits at the bottom of the window, so its menus open upwards. */
+
+.presenter-tool-group .export-menu {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 4px);
+}
+
+.presenter-swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.presenter-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.presenter-swatch.active {
+  border-color: var(--text-primary);
+}
+
+/* Lights off: the audience gets a blank screen, the presenter a dimmed slide. */
+
+.presenter-lights-off .presentation-slide {
+  opacity: 0.2;
+}
+
 /* ── Audience window ── */
 
 .present-window {
@@ -1482,6 +1552,7 @@ button.preview-error-item:hover {
 }
 
 .present-audience-stage {
+  position: relative;
   width: min(100vw, calc(100vh * var(--presentation-ratio, 1.7778)));
   aspect-ratio: var(--presentation-ratio, 1.7778);
   background: #ffffff;
@@ -1526,6 +1597,11 @@ button.preview-error-item:hover {
 .present-audience-fullscreen:focus-visible {
   background: var(--accent);
   opacity: 1;
+}
+
+.present-audience-blank .presentation-slide,
+.present-audience-blank .presentation-ink-canvas {
+  visibility: hidden;
 }
 
 /* ── Dialog / Modal ── */

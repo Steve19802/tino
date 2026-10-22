@@ -1,6 +1,8 @@
 import {
   PRESENTATION_KEYS, PRESENTATION_TICK_MS, SINGLE_ITEM,
 } from './constants.js'
+import { PresentationTools } from './presentation-tools.js'
+import { PresenterToolbar } from './presenter-toolbar.js'
 
 /** Milliseconds in one second. */
 
@@ -35,6 +37,8 @@ export class PresenterConsole {
     this._index = 0
     this._notes = null
     this._pages = null
+    this._tools = new PresentationTools(app)
+    this._toolbar = new PresenterToolbar(app)
   }
 
   /** Whether the console is currently on screen. */
@@ -52,6 +56,7 @@ export class PresenterConsole {
     clearInterval(this._clockTimer)
     this.app.els.presenter.classList.remove('hidden')
     this.app.els.presenter.setAttribute('aria-hidden', 'false')
+    this._slide = this._tools.attach(this.app.els.presenterStage)
     this.resetTimer()
     this._clockTimer = setInterval(() => this._tick(), PRESENTATION_TICK_MS)
   }
@@ -62,16 +67,19 @@ export class PresenterConsole {
     if (!this._open)
       return
     this._open = false
+    this._tools.detach()
     this.app.els.presenter.classList.add('hidden')
     this.app.els.presenter.setAttribute('aria-hidden', 'true')
     clearInterval(this._clockTimer)
     this._clockTimer = null
   }
 
-  /** Wire the console's buttons and keys to the presentation actions. */
+  /** Wire the console's buttons and keys, and the pointer controls. */
 
-  bind(dispatch) {
+  bind(dispatch, onTools) {
     this._dispatch = dispatch
+    this._onTools = onTools
+    this._toolbar.bind(this._tools, onTools)
     document.getElementById('btn-presenter-prev')
       .addEventListener('click', () => this._act('prev'))
     document.getElementById('btn-presenter-next')
@@ -90,13 +98,16 @@ export class PresenterConsole {
     this._paintSlides(pages, index)
     this._syncNotes(pages)
     this._showNote()
+    this._tools.page(index)
+    if (this._onTools)
+      this._onTools(this._tools.state())
   }
 
   /** Paint the current slide, the next slide, the counter and the progress. */
 
   _paintSlides(pages, index) {
     const position = index + SINGLE_ITEM
-    PresenterConsole._paint(this.app.els.presenterStage, pages[index])
+    PresenterConsole._paint(this._slide, pages[index])
     PresenterConsole._paint(this.app.els.presenterNext, pages[index + SINGLE_ITEM])
     this.app.els.presenterCounter.textContent = `${position} / ${pages.length}`
     this.app.els.presenterProgress.style.width =

@@ -502,6 +502,33 @@
       <div class="presenter-progress">
         <div class="presenter-progress-fill" id="presenter-progress"></div>
       </div>
+      <div class="presenter-tool-group">
+        <button class="icon-btn" id="btn-presenter-pointer" title="Pointer options"
+          aria-haspopup="true" aria-expanded="false">
+          <span class="material-symbols-outlined" id="presenter-pointer-icon">mouse</span>
+        </button>
+        <ul class="export-menu hidden" id="presenter-pointer-menu">
+          <li class="export-item presenter-tool" data-tool="none">
+            <span class="material-symbols-outlined">mouse</span>Pointer
+          </li>
+          <li class="export-item presenter-tool" data-tool="laser">
+            <span class="material-symbols-outlined">flare</span>Laser (L)
+          </li>
+          <li class="export-item presenter-tool" data-tool="pen">
+            <span class="material-symbols-outlined">draw</span>Pen (Shift+L)
+          </li>
+          <li class="export-item presenter-tool" data-tool="clear">
+            <span class="material-symbols-outlined">ink_eraser</span>Clear this slide
+          </li>
+          <li class="export-item presenter-tool" data-tool="clear" data-all="true">
+            <span class="material-symbols-outlined">delete_sweep</span>Clear all slides
+          </li>
+        </ul>
+      </div>
+      <div class="presenter-swatches hidden" id="presenter-swatches"></div>
+      <button class="icon-btn" id="btn-presenter-lights" title="Lights off (B)">
+        <span class="material-symbols-outlined">lightbulb</span>
+      </button>
       <button class="icon-btn" id="btn-presenter-exit" title="Exit presentation (Esc)">
         <span class="material-symbols-outlined">close</span>
       </button>
