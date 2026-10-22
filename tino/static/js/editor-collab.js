@@ -83,9 +83,24 @@ export class EditorCollab {
   }
 
   _onEvent(event) {
-    if (event === 'dropped')
+    if (event === 'dropped') {
       this._rebuild()
-    else if (event === 'synced' && this._reconnecting) {
+      return
+    }
+    if (event !== 'synced')
+      return
+
+    /*
+     * The first sync adopts the room content, replacing the document and
+     * mapping the caret to line 1. Re-assert the file's remembered caret so a
+     * jump to a position (e.g. a compile diagnostic) survives the sync.
+     */
+
+    const pos = this.app.tabPositions[this.app.currentFile]
+    if (pos)
+      this.app.els.editor.setCursor(pos.line, pos.col)
+
+    if (this._reconnecting) {
       this._reconnecting = false
       this.app.toast.success('Collaboration reconnected')
     }
