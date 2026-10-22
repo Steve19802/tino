@@ -136,6 +136,12 @@ export const PRESENTATION_WINDOW_FEATURES = 'popup,width=1280,height=800'
 
 export const PRESENTATION_PAGE = 'present.html'
 
+/** Ink colours offered for the pen; the first one is the default. */
+
+export const PRESENTATION_INK_COLOURS = [
+  '#e11d48', '#f59e0b', '#22c55e', '#3b82f6', '#ffffff',
+]
+
 /** Presentation action performed for each key, shared by console and audience. */
 
 export const PRESENTATION_KEYS = new Map([

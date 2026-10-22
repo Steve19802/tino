@@ -1,6 +1,7 @@
 import {
   PRESENTATION_COUNTER_MS, PRESENTATION_KEYS, SINGLE_ITEM,
 } from './constants.js'
+import { PresentationTools } from './presentation-tools.js'
 
 /**
  * The in-tab full-screen slide view.
@@ -20,8 +21,9 @@ export class PresentationView {
     this._open = false
     this._dispatch = null
     this._counterTimer = null
+    this._tools = new PresentationTools(app)
     this._onKey = ev => this._key(ev)
-    this._onClick = () => this._action('next')
+    this._onClick = () => this._click()
     this._onContext = ev => this._context(ev)
     this._onFullscreen = () => this._fullscreenChange()
   }
@@ -41,6 +43,7 @@ export class PresentationView {
   open(dispatch) {
     this._dispatch = dispatch
     this._open = true
+    this._slide = this._tools.attach(this.app.els.presentationStage)
     const overlay = this.app.els.presentation
     overlay.classList.remove('hidden')
     overlay.setAttribute('aria-hidden', 'false')
@@ -55,20 +58,28 @@ export class PresentationView {
       return
     this._open = false
     this._unbind()
+    this._tools.detach()
+    this._clearStage()
+    PresentationView._releaseFullscreen()
+  }
+
+  /** Take the slide and its counter off the screen. */
+
+  _clearStage() {
     const overlay = this.app.els.presentation
     overlay.classList.add('hidden')
     overlay.setAttribute('aria-hidden', 'true')
-    this.app.els.presentationStage.replaceChildren()
+    this._slide.replaceChildren()
     this.app.els.presentationCounter.classList.add('presentation-counter-dim')
     clearTimeout(this._counterTimer)
-    PresentationView._releaseFullscreen()
   }
 
   /** Paint the slide at *index* and flash the progress counter. */
 
   render(pages, index) {
     const counter = this.app.els.presentationCounter
-    this.app.els.presentationStage.innerHTML = pages[index] || ''
+    this._slide.innerHTML = pages[index] || ''
+    this._tools.page(index)
     counter.textContent = `${index + SINGLE_ITEM} / ${pages.length}`
     counter.classList.remove('presentation-counter-dim')
     clearTimeout(this._counterTimer)
@@ -96,6 +107,14 @@ export class PresentationView {
   _context(ev) {
     ev.preventDefault()
     this._action('prev')
+  }
+
+  /** A left click advances the deck, unless the pen is out to draw with. */
+
+  _click() {
+    if (this._tools.tool === 'pen')
+      return
+    this._action('next')
   }
 
   /** Leaving full-screen (Escape) also leaves presentation mode. */
